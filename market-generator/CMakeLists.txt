@@ -7,8 +7,15 @@ set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type")
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 
+find_package(PkgConfig REQUIRED)
+
+# yaml-cpp
 find_package(yaml-cpp REQUIRED)
 
+# hiredis (system package: libhiredis-dev)
+pkg_check_modules(HIREDIS REQUIRED hiredis)
+
+# nlohmann/json (header-only, fetched at configure time)
 include(FetchContent)
 FetchContent_Declare(
     nlohmann_json
@@ -25,11 +32,15 @@ add_executable(market_generator
     src/order_client.cpp
 )
 
-target_include_directories(market_generator PRIVATE src)
+target_include_directories(market_generator PRIVATE
+    src
+    ${HIREDIS_INCLUDE_DIRS}
+)
 
 target_link_libraries(market_generator PRIVATE
     nlohmann_json::nlohmann_json
     yaml-cpp
+    ${HIREDIS_LIBRARIES}
     pthread
 )
 

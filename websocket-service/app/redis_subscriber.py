@@ -66,6 +66,7 @@ async def redis_listener(
             channels: list[str] = []
             for sym in symbols:
                 channels.extend([
+                    f"market_data:{sym}",
                     f"trades:{sym}",
                     f"orderbook:{sym}",
                     f"candles:{sym}:1s",

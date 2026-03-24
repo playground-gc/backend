@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     pkg-config \
     libyaml-cpp-dev \
+    libhiredis-dev \
     wget \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -26,6 +27,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     libyaml-cpp0.7 \
+    libhiredis0.14 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/build/market_generator /usr/local/bin/market_generator

@@ -78,6 +78,43 @@ async def health():
     return {"status": "ok"}
 
 
+@app.websocket("/ws/market/{symbol}")
+async def market_data_endpoint(websocket: WebSocket, symbol: str):
+    """
+    Streams raw GBM L2 order book snapshots published by market-generator.
+    Each message is a JSON object:
+    {
+      "type": "market_data",
+      "symbol": "AAPL_S",
+      "tick": 12345,
+      "ts": 1234567890123,
+      "mid": 180.12,
+      "spread": 0.18,
+      "spread_pct": 0.1,
+      "asks": [{"price": 180.21, "size": 1000}, ...],   // best→worst
+      "bids": [{"price": 180.03, "size": 1000}, ...]    // best→worst
+    }
+    """
+    await websocket.accept()
+    channel = f"market_data:{symbol}"
+    manager.subscribe(websocket, [channel])
+    log.info("Client connected to /ws/market/%s", symbol)
+
+    try:
+        while True:
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+            except asyncio.TimeoutError:
+                await websocket.send_text('{"type":"ping"}')
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.debug("WebSocket closed: %s", e)
+    finally:
+        manager.unsubscribe(websocket)
+        log.info("Client disconnected from /ws/market/%s", symbol)
+
+
 @app.websocket("/ws/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
     await websocket.accept()

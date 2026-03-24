@@ -11,38 +11,43 @@
 #include <yaml-cpp/yaml.h>
 
 // ─── Global for signal handler ────────────────────────────────────────────────
+
 static std::vector<std::unique_ptr<GBMGenerator>>* g_generators = nullptr;
 static OrderClient* g_client = nullptr;
 
 static void handle_signal(int sig) {
     std::cout << "\n[main] Signal " << sig << " – stopping generators...\n";
-    if (g_generators) {
+    if (g_generators)
         for (auto& gen : *g_generators) gen->stop();
-    }
     if (g_client) g_client->disconnect();
     std::exit(0);
 }
 
-// ─── main ────────────────────────────────────────────────────────────────────
+// ─── main ─────────────────────────────────────────────────────────────────────
 
 int main() {
-    const char* engine_host_env   = std::getenv("ENGINE_HOST");
-    const char* engine_port_env   = std::getenv("ENGINE_PORT");
-    const char* stocks_config_env = std::getenv("STOCKS_CONFIG");
+    // ── Read environment variables ──────────────────────────────────────────
+    auto getenv_or = [](const char* key, const char* fallback) -> std::string {
+        const char* v = std::getenv(key);
+        return v ? v : fallback;
+    };
 
-    std::string engine_host  = engine_host_env  ? engine_host_env  : "127.0.0.1";
-    int         engine_port  = engine_port_env  ? std::stoi(engine_port_env) : 9000;
-    std::string stocks_config = stocks_config_env ? stocks_config_env : "/shared/stocks.yaml";
+    std::string engine_host   = getenv_or("ENGINE_HOST",   "127.0.0.1");
+    int         engine_port   = std::stoi(getenv_or("ENGINE_PORT",   "9000"));
+    std::string redis_host    = getenv_or("REDIS_HOST",    "127.0.0.1");
+    int         redis_port    = std::stoi(getenv_or("REDIS_PORT",    "6379"));
+    std::string stocks_config = getenv_or("STOCKS_CONFIG", "/shared/stocks.yaml");
 
-    std::cout << "[main] Engine: " << engine_host << ":" << engine_port << "\n";
-    std::cout << "[main] Stocks config: " << stocks_config << "\n";
+    std::cout << "[main] Engine:  " << engine_host  << ":" << engine_port  << "\n"
+              << "[main] Redis:   " << redis_host   << ":" << redis_port   << "\n"
+              << "[main] Stocks:  " << stocks_config << "\n";
 
     // ── Load stocks ──────────────────────────────────────────────────────────
     YAML::Node config;
     try {
         config = YAML::LoadFile(stocks_config);
     } catch (const std::exception& e) {
-        std::cerr << "[main] Failed to load stocks: " << e.what() << "\n";
+        std::cerr << "[main] Failed to load stocks config: " << e.what() << "\n";
         return 1;
     }
 
@@ -55,9 +60,14 @@ int main() {
         sc.volatility    = node["volatility"].as<double>();
         stocks.push_back(sc);
         std::cout << "[main] Stock: " << sc.symbol
-                  << " init=" << sc.initial_price
-                  << " μ=" << sc.drift
-                  << " σ=" << sc.volatility << "\n";
+                  << "  init=" << sc.initial_price
+                  << "  μ=" << sc.drift
+                  << "  σ=" << sc.volatility << "\n";
+    }
+
+    if (stocks.empty()) {
+        std::cerr << "[main] No stocks found in config. Exiting.\n";
+        return 1;
     }
 
     // ── Connect to matching engine ────────────────────────────────────────────
@@ -74,25 +84,21 @@ int main() {
     g_generators = &generators;
 
     for (const auto& sc : stocks) {
-        generators.emplace_back(std::make_unique<GBMGenerator>(sc, client));
+        generators.emplace_back(
+            std::make_unique<GBMGenerator>(sc, client, redis_host, redis_port));
         generators.back()->start();
     }
 
-    std::cout << "[main] " << generators.size() << " GBM generators running\n";
+    std::cout << "[main] " << generators.size()
+              << " GBM generators running at 100 ticks/sec\n";
 
     // ── Signal handlers ───────────────────────────────────────────────────────
     std::signal(SIGTERM, handle_signal);
     std::signal(SIGINT,  handle_signal);
 
-    // ── Wait forever ─────────────────────────────────────────────────────────
-    for (auto& gen : generators) {
-        // join is done in stop(); block main thread by waiting on stop signal
-    }
-
-    // Park main thread
-    while (true) {
+    // ── Park main thread ──────────────────────────────────────────────────────
+    while (true)
         std::this_thread::sleep_for(std::chrono::hours(1));
-    }
 
     return 0;
 }
