@@ -4,6 +4,7 @@ API Gateway – FastAPI
 Exposes REST endpoints for order management and market data.
 All routes prefixed with /api/v1
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -15,6 +16,7 @@ from app.database import get_pool, close_pool
 from app.engine_client import get_engine_pool, close_engine_pool
 from app.redis_client import get_redis, close_redis
 from app.routers import auth, orders, market
+from app.fill_processor import run_fill_processor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,9 +39,18 @@ async def lifespan(app: FastAPI):
     await get_engine_pool()
     log.info("Engine connection pool ready")
 
+    # Start fill processor background task
+    fill_task = asyncio.create_task(run_fill_processor())
+    log.info("Fill processor started")
+
     yield
 
     # Teardown
+    fill_task.cancel()
+    try:
+        await fill_task
+    except asyncio.CancelledError:
+        pass
     await close_engine_pool()
     await close_redis()
     await close_pool()
