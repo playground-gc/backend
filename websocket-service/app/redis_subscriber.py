@@ -51,7 +51,8 @@ async def redis_listener(
     symbols: list[str],
 ) -> None:
     """
-    Subscribe to all relevant channels for all symbols.
+    Subscribe to all relevant channels for all symbols, plus the pattern
+    stop_triggered:* for per-user stop order notifications.
     Runs forever as a background asyncio task.
     """
     while True:
@@ -75,10 +76,18 @@ async def redis_listener(
                 ])
 
             await pubsub.subscribe(*channels)
-            log.info("Subscribed to %d Redis channels", len(channels))
+            # Pattern subscribe for per-user stop order trigger notifications
+            await pubsub.psubscribe("stop_triggered:*")
+            log.info("Subscribed to %d Redis channels + pattern stop_triggered:*", len(channels))
 
             async for message in pubsub.listen():
-                if message["type"] == "message":
+                msg_type = message["type"]
+                if msg_type == "message":
+                    channel = message["channel"].decode()
+                    data    = message["data"].decode()
+                    await manager.broadcast(channel, data)
+                elif msg_type == "pmessage":
+                    # Pattern match: route to the specific channel name
                     channel = message["channel"].decode()
                     data    = message["data"].decode()
                     await manager.broadcast(channel, data)

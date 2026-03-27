@@ -115,6 +115,33 @@ async def market_data_endpoint(websocket: WebSocket, symbol: str):
         log.info("Client disconnected from /ws/market/%s", symbol)
 
 
+@app.websocket("/ws/orders/{user_id}")
+async def orders_endpoint(websocket: WebSocket, user_id: str):
+    """
+    Per-user order notification stream.
+    Delivers stop order trigger events published to stop_triggered:{user_id}.
+    The frontend connects here using the user_id received at login.
+    """
+    await websocket.accept()
+    channel = f"stop_triggered:{user_id}"
+    manager.subscribe(websocket, [channel])
+    log.info("Client connected to /ws/orders/%s", user_id)
+
+    try:
+        while True:
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+            except asyncio.TimeoutError:
+                await websocket.send_text('{"type":"ping"}')
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.debug("WebSocket closed: %s", e)
+    finally:
+        manager.unsubscribe(websocket)
+        log.info("Client disconnected from /ws/orders/%s", user_id)
+
+
 @app.websocket("/ws/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
     await websocket.accept()

@@ -27,20 +27,24 @@ CREATE TABLE orders (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
     symbol      VARCHAR(20) NOT NULL,
-    order_type  VARCHAR(10) NOT NULL CHECK (order_type IN ('limit','market')),
+    order_type  VARCHAR(15) NOT NULL CHECK (order_type IN ('limit','market','stop_limit','stop_market')),
     side        VARCHAR(4)  NOT NULL CHECK (side IN ('buy','sell')),
     price       DECIMAL(18,6),                      -- NULL for market orders
+    stop_price  DECIMAL(18,6),                      -- trigger price for stop orders
+    limit_price DECIMAL(18,6),                      -- limit price forwarded to engine on trigger (stop_limit only)
     quantity    DECIMAL(18,6) NOT NULL,
     filled_qty  DECIMAL(18,6) NOT NULL DEFAULT 0,
     status      VARCHAR(20)  NOT NULL DEFAULT 'open'
-                    CHECK (status IN ('open','partial','filled','cancelled','failed')),
+                    CHECK (status IN ('open','partial','filled','cancelled','failed','pending_trigger','triggered')),
+    expires_at  TIMESTAMPTZ,                        -- NULL = GTC; stop orders default to 30 days
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_orders_user          ON orders(user_id);
-CREATE INDEX idx_orders_symbol_status ON orders(symbol, status);
-CREATE INDEX idx_orders_created       ON orders(created_at DESC);
+CREATE INDEX idx_orders_user             ON orders(user_id);
+CREATE INDEX idx_orders_symbol_status    ON orders(symbol, status);
+CREATE INDEX idx_orders_created          ON orders(created_at DESC);
+CREATE INDEX idx_orders_pending_trigger  ON orders(status) WHERE status = 'pending_trigger';
 
 -- ─── Trades ───────────────────────────────────────────────────────────────────
 CREATE TABLE trades (

@@ -65,6 +65,29 @@ services:
       retries: 15
     restart: unless-stopped
 
+  trigger-engine:
+    build:
+      context: ./trigger-engine
+      dockerfile: Dockerfile
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ENGINE_HOST: matching-engine
+      ENGINE_PORT: "9000"
+      STOCKS_CONFIG: /shared/stocks.yaml
+    env_file: .env
+    volumes:
+      - ./shared/config/stocks.yaml:/shared/stocks.yaml:ro
+    networks: [synthetic-bull-net]
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      matching-engine:
+        condition: service_healthy
+    restart: unless-stopped
+
   market-generator:
     build:
       context: ./market-generator

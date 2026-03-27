@@ -31,6 +31,8 @@ class TokenResponse(BaseModel):
 class OrderType(str, Enum):
     limit = "limit"
     market = "market"
+    stop_limit = "stop_limit"
+    stop_market = "stop_market"
 
 
 class OrderSide(str, Enum):
@@ -44,6 +46,8 @@ class OrderStatus(str, Enum):
     filled = "filled"
     cancelled = "cancelled"
     failed = "failed"
+    pending_trigger = "pending_trigger"
+    triggered = "triggered"
 
 
 # ─── Order request / response ─────────────────────────────────────────────────
@@ -55,6 +59,8 @@ class OrderRequest(BaseModel):
     - **limit**: price is required; the order rests on the book until filled or cancelled.
     - **market**: price must be omitted; the order executes immediately at the best
       available price (IOC – any unfilled remainder is discarded, not resting).
+    - **stop_limit**: stop_price and limit_price required; persisted server-side until triggered.
+    - **stop_market**: stop_price required; persisted server-side until triggered.
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -63,13 +69,23 @@ class OrderRequest(BaseModel):
     order_type: OrderType = Field(
         ...,
         alias="type",
-        description="'limit' or 'market'",
+        description="'limit', 'market', 'stop_limit', or 'stop_market'",
     )
     side: OrderSide = Field(..., description="'buy' or 'sell'")
     price: Optional[float] = Field(
         None,
         gt=0,
-        description="Execution price. Required for limit orders; must be omitted for market orders.",
+        description="Execution price. Required for limit orders; omit for market/stop orders.",
+    )
+    stop_price: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Trigger price. Required for stop_limit and stop_market orders.",
+    )
+    limit_price: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Limit price submitted to the engine when stop_limit triggers.",
     )
     quantity: float = Field(..., gt=0, description="Number of units to trade")
 
@@ -81,11 +97,16 @@ class OrderRequest(BaseModel):
             raise ValueError(
                 "Market orders must not specify a price; omit the 'price' field"
             )
+        if self.order_type in (OrderType.stop_limit, OrderType.stop_market):
+            if self.stop_price is None:
+                raise ValueError("Stop orders require stop_price")
+        if self.order_type == OrderType.stop_limit and self.limit_price is None:
+            raise ValueError("stop_limit orders require limit_price")
         return self
 
 
 class OrderResponse(BaseModel):
-    """Returned immediately after a new order is accepted."""
+    """Returned immediately after a new limit / market order is accepted."""
 
     order_id: str
     status: str
@@ -96,6 +117,15 @@ class OrderResponse(BaseModel):
     quantity: float
 
 
+class StopOrderResponse(BaseModel):
+    """Returned immediately after a stop_limit / stop_market order is accepted."""
+
+    order_id: str
+    status: str      # "pending_trigger"
+    stop_price: float
+    expires_at: str  # ISO-8601 datetime
+
+
 class OrderDetail(BaseModel):
     """Full order record returned by GET /orders and GET /orders/{id}."""
 
@@ -103,12 +133,15 @@ class OrderDetail(BaseModel):
     symbol: str
     order_type: str
     side: str
-    price: Optional[float]
+    price: Optional[float] = None
+    stop_price: Optional[float] = None
+    limit_price: Optional[float] = None
     quantity: float
     filled_qty: float
     status: str
+    expires_at: Optional[datetime] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 # ─── Market data ──────────────────────────────────────────────────────────────

@@ -1,6 +1,8 @@
+import json
 import time
 import uuid
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,14 +10,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import get_current_user
 from app.database import get_db
 from app.engine_client import get_engine_pool
-from app.schemas import OrderDetail, OrderRequest, OrderResponse, OrderStatus
+from app.redis_client import get_redis
+from app.schemas import OrderDetail, OrderRequest, OrderResponse, OrderStatus, StopOrderResponse
 from app.config import settings
 
 router = APIRouter(prefix="/api/v1", tags=["orders"])
 log = logging.getLogger(__name__)
 
+_STOP_TYPES = {"stop_limit", "stop_market"}
 
-@router.post("/orders", response_model=OrderResponse, status_code=201)
+
+# ─── Place order ───────────────────────────────────────────────────────────────
+
+@router.post("/orders", status_code=201)
 async def place_order(
     body: OrderRequest,
     current_user: dict = Depends(get_current_user),
@@ -23,18 +30,68 @@ async def place_order(
     engine=Depends(get_engine_pool),
 ):
     """
-    Place a limit or market order.
+    Place a limit, market, stop_limit, or stop_market order.
 
     - **limit**: specify `price`; order rests on the book until filled or cancelled.
     - **market**: omit `price`; order executes immediately at best available price
       and **cannot be cancelled** after submission.
+    - **stop_limit**: specify `stop_price` and `limit_price`; persisted server-side until triggered.
+    - **stop_market**: specify `stop_price`; persisted server-side until triggered.
     """
     if body.symbol not in settings.symbols:
         raise HTTPException(status_code=400, detail=f"Unknown symbol: {body.symbol}")
 
-    order_id = str(uuid.uuid4())
     user_id  = current_user["user_id"]
+    order_id = str(uuid.uuid4())
 
+    # ── Stop orders ────────────────────────────────────────────────────────────
+    if body.order_type.value in _STOP_TYPES:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+
+        try:
+            await db.execute(
+                """
+                INSERT INTO orders
+                    (id, user_id, symbol, order_type, side, stop_price, limit_price,
+                     quantity, status, expires_at)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_trigger',$9)
+                """,
+                order_id, user_id, body.symbol,
+                body.order_type.value, body.side.value,
+                body.stop_price, body.limit_price,
+                body.quantity, expires_at,
+            )
+        except Exception as e:
+            log.error("DB insert failed for stop order: %s", e)
+            raise HTTPException(status_code=500, detail="Failed to save stop order")
+
+        # Notify trigger engine via Redis after DB commit
+        try:
+            redis = await get_redis()
+            payload = json.dumps({
+                "order_id":    order_id,
+                "user_id":     user_id,
+                "symbol":      body.symbol,
+                "side":        body.side.value,
+                "type":        body.order_type.value,
+                "stop_price":  body.stop_price,
+                "limit_price": body.limit_price or 0.0,
+                "quantity":    body.quantity,
+                "expires_at":  expires_at.isoformat(),
+            })
+            await redis.publish("stop_orders:new", payload)
+        except Exception as e:
+            log.warning("Redis publish for stop order failed: %s", e)
+            # Non-fatal: trigger engine will recover from DB on restart
+
+        return StopOrderResponse(
+            order_id=order_id,
+            status="pending_trigger",
+            stop_price=body.stop_price,
+            expires_at=expires_at.isoformat(),
+        )
+
+    # ── Limit / Market orders (existing behaviour) ─────────────────────────────
     # Persist order immediately so the client has a reference ID.
     # Status starts as 'open'; the matching engine updates it asynchronously
     # via trade events published to Redis.
@@ -99,8 +156,8 @@ async def get_order(
     user_id = current_user["user_id"]
     row = await db.fetchrow(
         """
-        SELECT id, symbol, order_type, side, price, quantity, filled_qty,
-               status, created_at, updated_at
+        SELECT id, symbol, order_type, side, price, stop_price, limit_price,
+               quantity, filled_qty, status, expires_at, created_at, updated_at
         FROM orders
         WHERE id = $1 AND user_id = $2
         """,
@@ -112,6 +169,8 @@ async def get_order(
     return dict(row)
 
 
+# ─── Cancel order ──────────────────────────────────────────────────────────────
+
 @router.delete("/orders/{order_id}", status_code=200)
 async def cancel_order(
     order_id: str,
@@ -120,7 +179,7 @@ async def cancel_order(
     engine=Depends(get_engine_pool),
 ):
     """
-    Cancel an open limit order.
+    Cancel an open limit or stop order.
 
     Market orders execute immediately (IOC) and **cannot be cancelled**.
     Returns 409 if the order is already filled, cancelled, or failed.
@@ -150,6 +209,21 @@ async def cancel_order(
         "UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id
     )
 
+    if row["status"] == "pending_trigger":
+        # Order was never sent to the matching engine; notify trigger engine to drop it
+        try:
+            redis = await get_redis()
+            payload = json.dumps({
+                "order_id": order_id,
+                "symbol":   row["symbol"],
+                "user_id":  user_id,
+            })
+            await redis.publish("stop_orders:cancel", payload)
+        except Exception as e:
+            log.warning("Redis publish for stop cancel failed: %s", e)
+        return {"order_id": order_id, "status": "cancelled"}
+
+    # For open / partial / triggered orders: notify matching engine
     cancel_msg = {
         "action":   "cancel",
         "order_id": order_id,
@@ -164,6 +238,8 @@ async def cancel_order(
     return {"order_id": order_id, "status": "cancelled"}
 
 
+# ─── List orders ───────────────────────────────────────────────────────────────
+
 @router.get("/orders", response_model=list[OrderDetail])
 async def list_orders(
     current_user: dict = Depends(get_current_user),
@@ -176,16 +252,15 @@ async def list_orders(
     List orders for the authenticated user.
 
     - `symbol`: filter by stock symbol (e.g. `AAPL_S`)
-    - `status`: filter by order status (`open`, `partial`, `filled`, `cancelled`, `failed`)
+    - `status`: filter by order status (`open`, `partial`, `filled`, `cancelled`, `failed`, `pending_trigger`, `triggered`)
     - `limit`: maximum results to return (1–100, default 50)
     """
     user_id = current_user["user_id"]
-    query = """
-        SELECT id, symbol, order_type, side, price, quantity, filled_qty,
-               status, created_at, updated_at
-        FROM orders
-        WHERE user_id = $1
-    """
+    query = (
+        "SELECT id, symbol, order_type, side, price, stop_price, limit_price, "
+        "quantity, filled_qty, status, expires_at, created_at "
+        "FROM orders WHERE user_id=$1"
+    )
     params: list = [user_id]
 
     if symbol:
