@@ -29,6 +29,7 @@ add_executable(matching_engine
     src/matching_engine.cpp
     src/tcp_server.cpp
     src/redis_publisher.cpp
+    src/lob_matching_engine.cpp
 )
 
 target_include_directories(matching_engine PRIVATE
@@ -44,5 +45,5 @@ target_link_libraries(matching_engine PRIVATE
 )
 
 target_compile_options(matching_engine PRIVATE
-    -O3 -Wall -Wextra
+    -O3 -march=native -Wall -Wextra
 )

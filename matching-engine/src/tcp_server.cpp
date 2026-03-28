@@ -11,6 +11,7 @@
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <x86intrin.h>
 
 using json = nlohmann::json;
 
@@ -20,14 +21,33 @@ static long long now_ms_tcp() {
         .count();
 }
 
+static uint64_t rdtsc_now() noexcept {
+    unsigned int aux;
+    _mm_lfence();
+    uint64_t ts = __rdtscp(&aux);
+    _mm_lfence();
+    return ts;
+}
+
 // ─── Constructor / Destructor ─────────────────────────────────────────────────
 
-TCPServer::TCPServer(int port, MatchingEngine& engine)
-    : port_(port), engine_(engine) {}
+TCPServer::TCPServer(int port, MatchingEngine& engine,
+                     LFQueue<LOBOrder>* lob_queue)
+    : port_(port), engine_(engine), lob_queue_(lob_queue) {}
 
 TCPServer::~TCPServer() {
     stop();
-    // Client threads are detached; they exit on their own once running_ is false.
+}
+
+// ─── Trader ID assignment ─────────────────────────────────────────────────────
+
+short int TCPServer::getOrAssignTraderId(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(trader_id_mtx_);
+    auto it = trader_id_map_.find(user_id);
+    if (it != trader_id_map_.end()) return it->second;
+    short int id = next_trader_id_.fetch_add(1, std::memory_order_relaxed);
+    trader_id_map_[user_id] = id;
+    return id;
 }
 
 // ─── start ───────────────────────────────────────────────────────────────────
@@ -73,7 +93,7 @@ void TCPServer::start() {
     }
 }
 
-// ─── stop ────────────────────────────────────────────────────────────────────
+// ─── stop ─────────────────────────────────────────────────────────────────────
 
 void TCPServer::stop() {
     running_ = false;
@@ -96,15 +116,12 @@ void TCPServer::handle_client(int client_fd, const std::string& client_addr) {
         chunk[n] = '\0';
         buffer.append(chunk, static_cast<size_t>(n));
 
-        // Process all complete newline-delimited messages in buffer
         size_t pos;
         while ((pos = buffer.find('\n')) != std::string::npos) {
             std::string msg = buffer.substr(0, pos);
             buffer.erase(0, pos + 1);
             if (!msg.empty() && msg.back() == '\r') msg.pop_back();
-            if (!msg.empty()) {
-                process_message(msg);
-            }
+            if (!msg.empty()) process_message(msg);
         }
     }
 
@@ -120,13 +137,55 @@ void TCPServer::process_message(const std::string& json_msg) {
         std::string action = j.value("action", "place");
 
         if (action == "cancel") {
-            engine_.cancel_order(
-                j.at("order_id").get<std::string>(),
-                j.at("symbol").get<std::string>(),
-                j.value("user_id", ""));
+            const std::string order_id = j.at("order_id").get<std::string>();
+            const std::string symbol   = j.at("symbol").get<std::string>();
+            const std::string user_id  = j.value("user_id", "");
+
+            // Legacy path
+            engine_.cancel_order(order_id, symbol, user_id);
+
+            // LOB path: push a delete request if we have a system_id mapping.
+            // For cancels we emit a LOBOrder with req_type='d'.
+            // The system_id is stored in the order_id field (if the order was
+            // originally placed via the LOB path it will be an integer string).
+            if (lob_queue_ != nullptr) {
+                try {
+                    int sys_id = std::stoi(order_id);
+                    short int tid = getOrAssignTraderId(user_id);
+                    uint64_t now = rdtsc_now();
+
+                    LOBOrder lob{};
+                    lob.arrived_cycle_count = now;
+                    lob.system_id  = sys_id;
+                    lob.price      = 0.0f;   // price not needed for delete
+                    lob.quantity   = 0;
+                    lob.trader_id  = tid;
+                    lob.order_type = 'b';    // side not needed for delete (LUT lookup)
+                    lob.req_type   = 'd';
+                    lob.out_cycle_count = now;
+
+                    LOBOrder* slot = lob_queue_->getNextWrite();
+                    if (slot) { *slot = lob; lob_queue_->updateWrite(); }
+                } catch (...) {
+                    // order_id is not an integer — not a LOB path order, skip
+                }
+            }
         } else {
             Order o = parse_order(j);
-            engine_.submit_order(std::move(o));
+
+            // Legacy path
+            engine_.submit_order(o);
+
+            // LOB path
+            if (lob_queue_ != nullptr) {
+                int sys_id = next_system_id_.fetch_add(1, std::memory_order_relaxed);
+                short int tid = getOrAssignTraderId(o.user_id);
+
+                LOBOrder lob = parse_lob_order(j, sys_id, tid);
+
+                LOBOrder* slot = lob_queue_->getNextWrite();
+                if (slot) { *slot = lob; lob_queue_->updateWrite(); }
+            }
         }
     } catch (const std::exception& ex) {
         std::cerr << "[TCPServer] Bad message: " << ex.what()
@@ -134,14 +193,14 @@ void TCPServer::process_message(const std::string& json_msg) {
     }
 }
 
-// ─── parse_order ─────────────────────────────────────────────────────────────
+// ─── parse_order (legacy) ─────────────────────────────────────────────────────
 
 Order TCPServer::parse_order(const json& j) {
     Order o;
-    o.id       = j.at("order_id").get<std::string>();
-    o.user_id  = j.at("user_id").get<std::string>();
-    o.symbol   = j.at("symbol").get<std::string>();
-    o.quantity = j.at("quantity").get<double>();
+    o.id        = j.at("order_id").get<std::string>();
+    o.user_id   = j.at("user_id").get<std::string>();
+    o.symbol    = j.at("symbol").get<std::string>();
+    o.quantity  = j.at("quantity").get<double>();
     o.timestamp = j.value("timestamp", now_ms_tcp());
 
     std::string type = j.value("type", "limit");
@@ -150,9 +209,42 @@ Order TCPServer::parse_order(const json& j) {
     std::string side = j.at("side").get<std::string>();
     o.side = (side == "sell") ? Order::Side::SELL : Order::Side::BUY;
 
-    if (o.type == Order::Type::LIMIT) {
+    if (o.type == Order::Type::LIMIT)
         o.price = j.at("price").get<double>();
-    }
 
     return o;
+}
+
+// ─── parse_lob_order ─────────────────────────────────────────────────────────
+
+LOBOrder TCPServer::parse_lob_order(const json& j, int system_id,
+                                     short int trader_id) {
+    LOBOrder lob{};
+
+    uint64_t now = rdtsc_now();
+    lob.arrived_cycle_count = now;
+    lob.out_cycle_count     = now;
+
+    lob.system_id  = system_id;
+    lob.trader_id  = trader_id;
+
+    std::string side = j.at("side").get<std::string>();
+    lob.order_type = (side == "sell") ? 's' : 'b';
+
+    std::string type = j.value("type", "limit");
+    // LOB engine handles limit orders (price/time priority).
+    // Market orders from the LOB perspective get a far-reaching price
+    // so they sweep all available levels.
+    if (type == "market") {
+        lob.price = (lob.order_type == 'b')
+                    ? 9999.9f   // aggressive buy — above all asks
+                    : 0.1f;     // aggressive sell — below all bids
+    } else {
+        lob.price = static_cast<float>(j.at("price").get<double>());
+    }
+
+    lob.quantity = static_cast<int>(j.at("quantity").get<double>());
+    lob.req_type = 'c';   // new order = create
+
+    return lob;
 }
