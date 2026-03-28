@@ -91,6 +91,20 @@ class TestUser:
         assert r.status_code == 200, f"List orders failed: {r.status_code} {r.text}"
         return r.json()
 
+    def place_stop_order(self, side, order_type, quantity, stop_price, limit_price=None):
+        payload = {
+            "symbol": SYMBOL,
+            "type": order_type,
+            "side": side,
+            "quantity": quantity,
+            "stop_price": stop_price,
+        }
+        if limit_price is not None:
+            payload["limit_price"] = limit_price
+        r = requests.post(f"{API_BASE}/orders", json=payload, headers=self.auth_header())
+        assert r.status_code == 201, f"Place stop order failed: {r.status_code} {r.text}"
+        return r.json()
+
     def cancel_order(self, order_id):
         r = requests.delete(f"{API_BASE}/orders/{order_id}", headers=self.auth_header())
         return r
@@ -726,6 +740,185 @@ def test_price_updates_after_trade(results: TestResults):
         results.record("Price updates after trade", False, str(e))
 
 
+# ─── Stop / Trigger Engine Tests ─────────────────────────────────────────────
+
+def wait_for_stop_order_done(user: TestUser, order_id: str, timeout=TIMEOUT):
+    """Poll until stop order is 'triggered' or 'filled' (trigger + immediate fill)."""
+    done_statuses = {"triggered", "filled", "partial"}
+    start = time.time()
+    while time.time() - start < timeout:
+        orders = user.get_orders()
+        for o in orders:
+            if str(o["id"]) == order_id and o["status"] in done_statuses:
+                return o
+        time.sleep(POLL_INTERVAL)
+    orders = user.get_orders()
+    for o in orders:
+        if str(o["id"]) == order_id:
+            raise AssertionError(
+                f"Stop order {order_id} still '{o['status']}' after {timeout}s "
+                f"(expected triggered/filled)"
+            )
+    raise AssertionError(f"Stop order {order_id} not found after {timeout}s")
+
+
+def test_stop_order_validation(results: TestResults):
+    """Test 23: Invalid stop orders are rejected."""
+    try:
+        user = TestUser("sv")
+        user.register()
+
+        # stop_limit without stop_price
+        r = requests.post(f"{API_BASE}/orders", json={
+            "symbol": SYMBOL, "type": "stop_limit", "side": "sell",
+            "quantity": 1.0, "limit_price": 100.0,
+        }, headers=user.auth_header())
+        assert r.status_code in (400, 422), f"Expected 400/422, got {r.status_code}"
+
+        # stop_limit without limit_price
+        r = requests.post(f"{API_BASE}/orders", json={
+            "symbol": SYMBOL, "type": "stop_limit", "side": "sell",
+            "quantity": 1.0, "stop_price": 100.0,
+        }, headers=user.auth_header())
+        assert r.status_code in (400, 422), f"Expected 400/422, got {r.status_code}"
+
+        # stop_market without stop_price
+        r = requests.post(f"{API_BASE}/orders", json={
+            "symbol": SYMBOL, "type": "stop_market", "side": "sell",
+            "quantity": 1.0,
+        }, headers=user.auth_header())
+        assert r.status_code in (400, 422), f"Expected 400/422, got {r.status_code}"
+
+        results.record("Stop order validation", True)
+    except Exception as e:
+        results.record("Stop order validation", False, str(e))
+
+
+def test_cancel_pending_stop_order(results: TestResults):
+    """Test 24: Cancel a pending stop order before it triggers."""
+    try:
+        user = TestUser("spc")
+        user.register()
+
+        ticker = get_ticker_price()
+        if ticker is None:
+            ticker = 180.0
+
+        # Place stop far from market (won't trigger)
+        stop_px = round(ticker - 50.0, 2)
+        resp = user.place_stop_order("sell", "stop_limit", 1.0,
+                                     stop_price=stop_px,
+                                     limit_price=round(stop_px - 1.0, 2))
+        order_id = resp["order_id"]
+
+        # Verify pending_trigger
+        orders = user.get_orders()
+        found = [o for o in orders if str(o["id"]) == order_id]
+        assert found and found[0]["status"] == "pending_trigger", \
+            f"Expected pending_trigger, got {found[0]['status'] if found else 'not found'}"
+
+        time.sleep(0.5)
+
+        # Cancel it
+        r = user.cancel_order(order_id)
+        assert r.status_code == 200, f"Cancel failed: {r.status_code} {r.text}"
+
+        # Verify cancelled
+        orders = user.get_orders(status="cancelled")
+        found = [o for o in orders if str(o["id"]) == order_id]
+        assert len(found) == 1, f"Order not found in cancelled list"
+
+        results.record("Cancel pending stop order", True)
+    except Exception as e:
+        results.record("Cancel pending stop order", False, str(e))
+
+
+def test_stop_limit_sell_triggers(results: TestResults):
+    """Test 25: stop_limit sell triggers when price drops to stop_price."""
+    try:
+        stopper = TestUser("sls_stop")
+        maker   = TestUser("sls_maker")
+        mover   = TestUser("sls_mover")
+        stopper.register()
+        maker.register()
+        mover.register()
+
+        ticker = get_ticker_price()
+        if ticker is None:
+            ticker = 180.0
+
+        # Set stop_price slightly below current price so a small down-move triggers it
+        stop_px  = round(ticker - 2.0, 2)
+        limit_px = round(stop_px - 0.5, 2)
+
+        # Place stop_limit sell (pending_trigger, waits for price to drop)
+        resp = stopper.place_stop_order("sell", "stop_limit", 1.0,
+                                        stop_price=stop_px,
+                                        limit_price=limit_px)
+        stop_order_id = resp["order_id"]
+
+        orders = stopper.get_orders()
+        found = [o for o in orders if str(o["id"]) == stop_order_id]
+        assert found and found[0]["status"] == "pending_trigger", \
+            f"Expected pending_trigger, got {found[0]['status'] if found else 'not found'}"
+
+        # Drive price down to stop_px: maker posts buy @ stop_px, mover sells into it
+        maker.place_order("buy", "limit", 2.0, price=stop_px)
+        time.sleep(0.3)
+        mover.place_order("sell", "limit", 2.0, price=stop_px)
+
+        # Wait for the trigger engine to fire
+        order = wait_for_stop_order_done(stopper, stop_order_id)
+        assert order["status"] in ("triggered", "filled", "partial"), \
+            f"Unexpected status: {order['status']}"
+
+        results.record("Stop-limit sell triggers", True)
+    except Exception as e:
+        results.record("Stop-limit sell triggers", False, str(e))
+
+
+def test_stop_market_buy_triggers(results: TestResults):
+    """Test 26: stop_market buy triggers when price rises to stop_price."""
+    try:
+        stopper = TestUser("smb_stop")
+        maker   = TestUser("smb_maker")
+        mover   = TestUser("smb_mover")
+        stopper.register()
+        maker.register()
+        mover.register()
+
+        ticker = get_ticker_price()
+        if ticker is None:
+            ticker = 180.0
+
+        # Set stop_price slightly above current price so a small up-move triggers it
+        stop_px = round(ticker + 2.0, 2)
+
+        # Place stop_market buy (pending_trigger, waits for price to rise)
+        resp = stopper.place_stop_order("buy", "stop_market", 1.0,
+                                        stop_price=stop_px)
+        stop_order_id = resp["order_id"]
+
+        orders = stopper.get_orders()
+        found = [o for o in orders if str(o["id"]) == stop_order_id]
+        assert found and found[0]["status"] == "pending_trigger", \
+            f"Expected pending_trigger, got {found[0]['status'] if found else 'not found'}"
+
+        # Drive price up to stop_px: maker posts sell @ stop_px, mover buys into it
+        maker.place_order("sell", "limit", 2.0, price=stop_px)
+        time.sleep(0.3)
+        mover.place_order("buy", "limit", 2.0, price=stop_px)
+
+        # Wait for the trigger engine to fire
+        order = wait_for_stop_order_done(stopper, stop_order_id)
+        assert order["status"] in ("triggered", "filled", "partial"), \
+            f"Unexpected status: {order['status']}"
+
+        results.record("Stop-market buy triggers", True)
+    except Exception as e:
+        results.record("Stop-market buy triggers", False, str(e))
+
+
 # ─── Runner ──────────────────────────────────────────────────────────────────
 
 def run_all():
@@ -780,6 +973,12 @@ def run_all():
     test_trades_in_db(results)
     test_portfolio_after_trade(results)
     test_price_updates_after_trade(results)
+
+    print("\n── Trigger Engine (Stop Orders) ────────────────────────")
+    test_stop_order_validation(results)
+    test_cancel_pending_stop_order(results)
+    test_stop_limit_sell_triggers(results)
+    test_stop_market_buy_triggers(results)
 
     print("\n── Multi-symbol ────────────────────────────────────────")
     test_multi_symbol(results)
