@@ -150,6 +150,13 @@ void MatchingEngine::publish_trades(const std::vector<Trade>& trades,
 // ─── publish_snapshot ─────────────────────────────────────────────────────────
 
 void MatchingEngine::publish_snapshot(OrderBook& book, const std::string& symbol) {
+    thread_local uint64_t last_snapshot_time = 0;
+    uint64_t now = now_ms_me();
+    if (now - last_snapshot_time < 100) {
+        return; // throttle snapshot publishing to 10 FPS
+    }
+    last_snapshot_time = now;
+
     auto [bids, asks] = book.snapshot(20);
     std::string snap = snapshot_to_json(symbol, bids, asks);
 
