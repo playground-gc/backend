@@ -113,7 +113,10 @@ void TriggerEngine::on_price_tick(const std::string& symbol, double price) {
             std::lock_guard<std::mutex> lk(cancelled_mtx_);
             if (cancelled_ids_.count(o.order_id)) continue;
         }
-        if (triggered_ids_.count(o.order_id)) continue;
+        {
+            std::lock_guard<std::mutex> lk(triggered_mtx_);
+            if (triggered_ids_.count(o.order_id)) continue;
+        }
 
         // Check expiry
         if (o.expires_at_ms > 0 && now_ms() > o.expires_at_ms) {
@@ -141,7 +144,10 @@ void TriggerEngine::on_price_tick(const std::string& symbol, double price) {
             std::lock_guard<std::mutex> lk(cancelled_mtx_);
             if (cancelled_ids_.count(o.order_id)) continue;
         }
-        if (triggered_ids_.count(o.order_id)) continue;
+        {
+            std::lock_guard<std::mutex> lk(triggered_mtx_);
+            if (triggered_ids_.count(o.order_id)) continue;
+        }
 
         // Check expiry
         if (o.expires_at_ms > 0 && now_ms() > o.expires_at_ms) {
@@ -232,14 +238,20 @@ void TriggerEngine::on_cancel_stop_order(const std::string& json_str) {
 
 void TriggerEngine::dispatch(const StopOrder& order) {
     // Mark as triggered immediately (idempotency guard)
-    triggered_ids_.insert(order.order_id);
+    {
+        std::lock_guard<std::mutex> lk(triggered_mtx_);
+        triggered_ids_.insert(order.order_id);
+    }
 
     std::string msg = build_engine_json(order);
 
     bool ok = eng_.send_order(msg);
     if (!ok) {
         // Remove from triggered set so next price tick can retry
-        triggered_ids_.erase(order.order_id);
+        {
+            std::lock_guard<std::mutex> lk(triggered_mtx_);
+            triggered_ids_.erase(order.order_id);
+        }
         std::cerr << "[TriggerEngine] Failed to forward order " << order.order_id
                   << " to engine – will retry on next tick\n";
         // Re-insert into heap for next tick
@@ -318,7 +330,12 @@ void TriggerEngine::expiry_sweep_loop() {
                     std::lock_guard<std::mutex> lk(cancelled_mtx_);
                     already_done = cancelled_ids_.count(oid) > 0;
                 }
-                if (!already_done && !triggered_ids_.count(oid)) {
+                bool already_triggered = false;
+                {
+                    std::lock_guard<std::mutex> lk(triggered_mtx_);
+                    already_triggered = triggered_ids_.count(oid) > 0;
+                }
+                if (!already_done && !already_triggered) {
                     pg_.mark_cancelled(oid);
                     std::lock_guard<std::mutex> lk(cancelled_mtx_);
                     cancelled_ids_.insert(oid);

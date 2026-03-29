@@ -54,8 +54,10 @@ private:
     // Per-symbol heap state — accessed only from the Redis subscriber thread
     std::unordered_map<std::string, SymbolState> states_;
 
-    // Idempotency: order IDs already dispatched to the matching engine
+    // Idempotency: order IDs already dispatched to the matching engine.
+    // Protected by triggered_mtx_ — accessed from both subscriber and sweeper threads.
     std::unordered_set<std::string> triggered_ids_;
+    std::mutex                      triggered_mtx_;
 
     // Orders cancelled while in the heap (lazy deletion)
     // Protected by cancelled_mtx_ — accessed from both subscriber and sweeper threads.

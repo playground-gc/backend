@@ -22,8 +22,15 @@ GBMGenerator::GBMGenerator(StockConfig  config,
       redis_host_(std::move(redis_host)),
       redis_port_(redis_port),
       current_price_(config_.initial_price),
+      prev_price_(config_.initial_price),
       rng_(std::random_device{}())
-{}
+{
+    // Pre-compute per-tick GBM parameters once (Itô-corrected, square-root-of-time rule).
+    double ticks_per_year = static_cast<double>(TPS) * ANNUAL_STEPS;
+    sigma_tick_ = config_.volatility / std::sqrt(ticks_per_year);
+    double mu_tick = config_.drift / ticks_per_year;
+    drift_term_ = mu_tick - 0.5 * sigma_tick_ * sigma_tick_;
+}
 
 // ─── start / stop ─────────────────────────────────────────────────────────────
 
@@ -52,17 +59,25 @@ void GBMGenerator::run() {
     while (running_) {
         ++tick_count_;
 
-        // 1. Advance GBM price
+        // 1. Advance GBM price (prev_price_ captured before the step)
+        prev_price_ = current_price_;
         next_price();
 
-        // 2. Build L2 book (lognormal spacing + exponential size decay)
-        Book book = build_book();
+        // 2. Volume multiplier: scales order-book sizes with price movement.
+        //    vol_mult = 1 + VOL_SENSITIVITY * |log(S_t / S_{t-1})| / sigma_tick
+        //    Normalising by sigma_tick maps the return to a |Z| scale so the
+        //    sensitivity constant is independent of per-symbol volatility.
+        double abs_return = std::abs(std::log(current_price_ / prev_price_));
+        double vol_mult   = 1.0 + VOL_SENSITIVITY * abs_return / sigma_tick_;
 
-        // 3. Publish snapshot to Redis → websocket-service fans it out
+        // 3. Build L2 book (lognormal spacing + vol-scaled exponential size decay)
+        Book book = build_book(vol_mult);
+
+        // 4. Publish snapshot to Redis → websocket-service fans it out
         ensure_redis();
         publish_book(book);
 
-        // 4. Place orders in the matching engine so it stays liquid
+        // 5. Place orders in the matching engine so it stays liquid
         place_orders(book, levels_to_place_(rng_));
 
         std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_MS));
@@ -75,11 +90,10 @@ void GBMGenerator::run() {
 // Exact solution:  S(t+dt) = S(t) * exp( (μ - σ²/2)*dt  +  σ*√dt*Z )
 
 void GBMGenerator::next_price() {
-    double dt         = 1.0 / (static_cast<double>(TPS) * ANNUAL_STEPS);
-    double drift_term = (config_.drift - 0.5 * config_.volatility * config_.volatility) * dt;
-    double diff_term  = config_.volatility * std::sqrt(dt) * normal_(rng_);
-
-    current_price_ *= std::exp(drift_term + diff_term);
+    // Exact GBM solution using pre-computed Itô-corrected tick params:
+    //   S(t+dt) = S(t) * exp( drift_term_ + sigma_tick_ * Z )
+    double Z = normal_(rng_);
+    current_price_ *= std::exp(drift_term_ + sigma_tick_ * Z);
 
     // Guard against NaN / zero / price collapse
     if (!std::isfinite(current_price_) || current_price_ < 0.01)
@@ -93,7 +107,7 @@ void GBMGenerator::next_price() {
 // Lognormal spacing: offset_k = half_spread * mid * exp(k * LOG_STEP)
 // Exponential size decay: sz_k = BASE_SIZE * exp(-SIZE_DECAY*k) * (1 + noise)
 
-std::vector<Level> GBMGenerator::generate_levels(double mid, int side) {
+std::vector<Level> GBMGenerator::generate_levels(double mid, int side, double vol_mult) {
     std::vector<Level> levels;
     levels.reserve(LEVELS);
 
@@ -103,8 +117,9 @@ std::vector<Level> GBMGenerator::generate_levels(double mid, int side) {
         double offset_k = base_offset * std::exp(static_cast<double>(k) * LOG_STEP);
         double price_k  = mid + side * offset_k;
 
+        // Size scaled by vol_mult: larger on high-movement ticks (volatility-volume correlation).
         double Z_k    = normal_(rng_);
-        double raw_sz = BASE_SIZE
+        double raw_sz = BASE_SIZE * vol_mult
                       * std::exp(-SIZE_DECAY * static_cast<double>(k))
                       * (1.0 + SIZE_NOISE_FRAC * Z_k);
         long sz_k = std::max(1L, static_cast<long>(raw_sz));
@@ -116,13 +131,13 @@ std::vector<Level> GBMGenerator::generate_levels(double mid, int side) {
 
 // ─── build_book ───────────────────────────────────────────────────────────────
 
-Book GBMGenerator::build_book() {
+Book GBMGenerator::build_book(double vol_mult) {
     Book book;
     book.mid          = current_price_;
     book.tick         = tick_count_;
     book.timestamp_ms = now_ms();
-    book.asks         = generate_levels(book.mid, +1);
-    book.bids         = generate_levels(book.mid, -1);
+    book.asks         = generate_levels(book.mid, +1, vol_mult);
+    book.bids         = generate_levels(book.mid, -1, vol_mult);
     book.spread       = book.asks[0].price - book.bids[0].price;
     book.spread_pct   = (book.spread / book.mid) * 100.0;
     return book;
