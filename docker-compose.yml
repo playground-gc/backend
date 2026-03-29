@@ -44,6 +44,7 @@ services:
   # ─── C++ Core ────────────────────────────────────────────────────────────────
 
   matching-engine:
+    platform: linux/amd64
     build:
       context: ./matching-engine
       dockerfile: Dockerfile

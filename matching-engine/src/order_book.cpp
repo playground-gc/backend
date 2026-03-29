@@ -245,6 +245,8 @@ std::vector<Trade> OrderBook::match_market_order(Order& aggressor) {
                 if (resting.filled_qty >= resting.quantity) {
                     order_index_.erase(resting.id);
                     q.pop();
+                } else {
+                    resting.status = Order::Status::PARTIAL;
                 }
             }
 
@@ -274,6 +276,8 @@ std::vector<Trade> OrderBook::match_market_order(Order& aggressor) {
                 if (resting.filled_qty >= resting.quantity) {
                     order_index_.erase(resting.id);
                     q.pop();
+                } else {
+                    resting.status = Order::Status::PARTIAL;
                 }
             }
 

@@ -159,7 +159,10 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
         while True:
             try:
                 raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
-                msg = json.loads(raw)
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
                 if "subscribe" in msg:
                     new_channels = resolve_channels(msg["subscribe"], symbol)
                     manager.subscribe(websocket, new_channels)

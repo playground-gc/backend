@@ -59,31 +59,22 @@ static void broadcast_bridge(LFQueue<BroadcastElement>*  bq,
                               RedisPublisher*              publisher,
                               std::atomic<bool>&           terminate,
                               const std::string&           symbol) {
+    // The legacy MatchingEngine already handles all Redis publishing
+    // (stream:trades, trades:<symbol> pub/sub, price:<symbol> hash, orderbook snapshots).
+    // This bridge only needs to drain the LOB engine's output queues to prevent
+    // them from filling up and stalling the busy-wait engine thread.
+    // NOTE: The LOB aggressiveMatch path does not emit type='T' BroadcastElements
+    // (trades are only logged internally and acked via lobAckQueue), so publishing
+    // from here would be both dead code and would produce incomplete trade events
+    // missing buyer_id / seller_id / buy_order_id / sell_order_id.
+    (void)publisher; (void)symbol;
+
     while (!terminate.load(std::memory_order_acquire)) {
         // ── drain broadcast queue ─────────────────────────────────────────────
         BroadcastElement* be = bq->getNextRead();
-        if (be != nullptr) {
-            if (be->type == 'T') {
-                // Trade event
-                json j;
-                j["event"]    = "trade";
-                j["trade_id"] = std::to_string(be->system_id);
-                j["symbol"]   = symbol;
-                j["price"]    = be->price;
-                j["quantity"] = be->quantity;
-                j["side"]     = std::string(1, be->side);
-                j["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
-                std::string msg = j.dump();
-                publisher->publish("trades:" + symbol, msg);
-                publisher->xadd("stream:trades", "data", msg);
-                publisher->hset("price:" + symbol, "price",    std::to_string(be->price));
-                publisher->hset("price:" + symbol, "volume",   std::to_string(be->quantity));
-            }
-            bq->updateRead();
-        }
+        if (be != nullptr) bq->updateRead();
 
-        // ── drain ack queue (discard — routing handled by API gateway) ────────
+        // ── drain ack queue ───────────────────────────────────────────────────
         LOBAcknowledgement* ack = aq->getNextRead();
         if (ack != nullptr) aq->updateRead();
     }

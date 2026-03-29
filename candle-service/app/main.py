@@ -38,11 +38,15 @@ async def persist_candle(
 ) -> None:
     candle_json = json.dumps(candle.to_dict())
     key = f"candles:{candle.symbol}:{candle.interval}"
+    score = candle.start_time
 
-    # Write to Redis sorted set (score = start_time_ms)
-    await redis_conn.zadd(key, {candle_json: candle.start_time})
-    # Trim to last CANDLE_MAXLEN entries
-    await redis_conn.zremrangebyrank(key, 0, -(CANDLE_MAXLEN + 1))
+    # Atomically evict any stale entry at this exact bucket then write the new one.
+    # Without this, a re-opened bucket produces duplicate members at the same score.
+    pipe = redis_conn.pipeline()
+    pipe.zremrangebyscore(key, score, score)
+    pipe.zadd(key, {candle_json: score})
+    pipe.zremrangebyrank(key, 0, -(CANDLE_MAXLEN + 1))
+    await pipe.execute()
 
     # Persist to PostgreSQL
     async with pg_pool.acquire() as conn:

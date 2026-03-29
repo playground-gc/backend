@@ -66,6 +66,7 @@ private:
 
     // ── state ──────────────────────────────────────────────────────────────
     double   current_price_;
+    double   prev_price_  = 0.0;
     uint64_t tick_count_ = 0;
 
     // ── threading ──────────────────────────────────────────────────────────
@@ -85,7 +86,7 @@ private:
     static constexpr int    TPS          = 100;
     static constexpr double ANNUAL_STEPS = 252.0 * 6.5 * 3600.0;
 
-    // ── Book geometry (from gbm.cpp.txt) ───────────────────────────────────
+    // ── Book geometry ──────────────────────────────────────────────────────
     static constexpr int    LEVELS           = 10;
     static constexpr double HALF_SPREAD_FRAC = 5e-4;   // 0.05 % of mid
     static constexpr double LOG_STEP         = 0.30;   // log-space level gap
@@ -93,11 +94,20 @@ private:
     static constexpr double SIZE_DECAY       = 0.30;
     static constexpr double SIZE_NOISE_FRAC  = 0.10;
 
+    // ── Volume–price correlation ───────────────────────────────────────────
+    static constexpr double VOL_SENSITIVITY  = 8.0;
+    // vol_mult = 1 + VOL_SENSITIVITY * |log(S_t/S_{t-1})| / sigma_tick
+    // Typical tick (|Z|~0.8): ~7.4×   3-sigma move: ~25×
+
+    // ── Pre-computed per-tick GBM params (set in constructor) ──────────────
+    double sigma_tick_  = 0.0;   // σ / sqrt(ticks_per_year)
+    double drift_term_  = 0.0;   // μ_tick − ½ σ_tick²  (Itô correction)
+
     // ── private methods ────────────────────────────────────────────────────
     void run();
     void next_price();
-    std::vector<Level> generate_levels(double mid, int side);
-    Book   build_book();
+    std::vector<Level> generate_levels(double mid, int side, double vol_mult);
+    Book   build_book(double vol_mult);
     void   publish_book(const Book& book);
     void   place_orders(const Book& book, int n);
     bool   connect_redis();
