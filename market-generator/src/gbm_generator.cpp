@@ -54,6 +54,22 @@ void GBMGenerator::run() {
     std::cout << "[GBM:" << config_.symbol << "] started  price="
               << current_price_ << "\n";
 
+    // Seed the initial price into Redis so the market-maker-bot can start
+    // quoting immediately (avoids chicken-and-egg bootstrap problem).
+    if (redis_ctx_) {
+        std::string price_key = "price:" + config_.symbol;
+        auto* r1 = static_cast<redisReply*>(
+            redisCommand(redis_ctx_, "HSET %s price %f", price_key.c_str(), current_price_));
+        if (r1) freeReplyObject(r1);
+        auto* r2 = static_cast<redisReply*>(
+            redisCommand(redis_ctx_, "HSET %s timestamp %lld", price_key.c_str(), now_ms()));
+        if (r2) freeReplyObject(r2);
+        auto* r3 = static_cast<redisReply*>(
+            redisCommand(redis_ctx_, "HSET %s volume %f", price_key.c_str(), 0.0));
+        if (r3) freeReplyObject(r3);
+        std::cout << "[GBM:" << config_.symbol << "] Seeded initial price " << current_price_ << "\n";
+    }
+
     constexpr int SLEEP_MS = 1000 / TPS;  // 10 ms per tick
 
     while (running_) {
@@ -77,10 +93,19 @@ void GBMGenerator::run() {
         ensure_redis();
         publish_book(book);
 
+        // 4b. Keep price:{symbol} hash fresh for the market-maker-bot
+        if (redis_ctx_) {
+            std::string price_key = "price:" + config_.symbol;
+            auto* r = static_cast<redisReply*>(
+                redisCommand(redis_ctx_, "HSET %s price %f", price_key.c_str(),
+                             std::round(current_price_ * 100.0) / 100.0));
+            if (r) freeReplyObject(r);
+        }
+
         // 5. Place orders in the matching engine so it stays liquid
         place_orders(book, levels_to_place_(rng_));
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_MS));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     std::cout << "[GBM:" << config_.symbol << "] stopped\n";

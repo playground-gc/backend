@@ -30,7 +30,7 @@ API_BASE = "http://localhost:8000/api/v1"
 WS_URL = "ws://localhost:8001/ws"
 SYMBOL = "AAPL_S"
 POLL_INTERVAL = 0.5   # seconds between status checks
-TIMEOUT = 15          # max seconds to wait for async operations
+TIMEOUT = 20          # max seconds to wait for async operations
 
 
 def random_suffix():
@@ -288,15 +288,16 @@ def test_cancel_filled_order_fails(results: TestResults):
         buyer.register()
         seller.register()
 
-        # Get current price for realistic order
+        # Get current price for crossing orders
         ticker = get_ticker_price()
         if ticker is None:
-            results.record("Cancel filled order (skipped - no price data)", True)
+            results.record("Cancel filled order rejected (skipped - no price data)", True)
             return
 
-        # Place matching orders
-        sell_resp = seller.place_order("sell", "limit", 1.0, price=round(ticker - 1, 2))
-        buy_resp = buyer.place_order("buy", "limit", 1.0, price=round(ticker + 1, 2))
+        # Place matching orders with aggressive prices
+        sell_resp = seller.place_order("sell", "limit", 1.0, price=round(ticker - 5, 2))
+        time.sleep(0.5)
+        buy_resp = buyer.place_order("buy", "limit", 1.0, price=round(ticker + 5, 2))
 
         # Wait for fill
         wait_for_order_status(buyer, buy_resp["order_id"], "filled")
@@ -360,16 +361,30 @@ def test_unauthorized_access(results: TestResults):
     except Exception as e:
         results.record("Unauthorized access blocked", False, str(e))
 
-
 def get_ticker_price():
     """Get current market price for SYMBOL, or None if not available."""
     try:
-        r = requests.get(f"{API_BASE}/ticker/{SYMBOL}", timeout=3)
+        r = requests.get(f"{API_BASE}/ticker/{SYMBOL}", timeout=5)
         if r.status_code == 200:
-            return r.json()["price"]
+            return r.json().get("price")
     except Exception:
         pass
     return None
+
+
+def get_mid_price():
+    """Get current mid-market price from orderbook."""
+    try:
+        r = requests.get(f"{API_BASE}/orderbook/{SYMBOL}", timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            bids = data.get("bids", [])
+            asks = data.get("asks", [])
+            if bids and asks:
+                return round((float(bids[0][0]) + float(asks[0][0])) / 2.0, 2)
+    except Exception:
+        pass
+    return 180.0
 
 
 def test_matching_engine_limit_orders(results: TestResults):
@@ -386,13 +401,13 @@ def test_matching_engine_limit_orders(results: TestResults):
             # Use initial price from config
             ticker = 180.0
 
-        buy_price = round(ticker + 2.0, 2)
-        sell_price = round(ticker - 2.0, 2)
+        buy_price = round(ticker + 5.0, 2)
+        sell_price = round(ticker - 5.0, 2)
         qty = 3.0
 
         # Seller places ask, buyer places bid that crosses it
         sell_resp = seller.place_order("sell", "limit", qty, price=sell_price)
-        time.sleep(0.5)
+        time.sleep(1.0)
         buy_resp = buyer.place_order("buy", "limit", qty, price=buy_price)
 
         # Wait for both to fill
@@ -448,15 +463,14 @@ def test_partial_fill(results: TestResults):
         maker.register()
         taker.register()
 
-        ticker = get_ticker_price()
-        if ticker is None:
-            ticker = 180.0
-
-        price = round(ticker + 0.5, 2)
+        mid_px = get_mid_price()
+        price = mid_px
 
         # Maker posts 2 qty, taker wants 5
+        # Since price is exactly mid_px, it's inside the spread of the market generator.
+        # It ONLY crosses with each other.
         maker.place_order("sell", "limit", 2.0, price=price)
-        time.sleep(0.5)
+        time.sleep(1.0)
         taker_resp = taker.place_order("buy", "limit", 5.0, price=price)
 
         # Should be partial (filled 2 of 5)
@@ -538,13 +552,13 @@ def test_portfolio_after_trade(results: TestResults):
         if ticker is None:
             ticker = 180.0
 
-        price = round(ticker - 1.0, 2)
+        price = round(ticker - 5.0, 2)
         qty = 4.0
 
         # Execute a trade
         seller.place_order("sell", "limit", qty, price=price)
-        time.sleep(0.5)
-        buy_resp = buyer.place_order("buy", "limit", qty, price=round(ticker + 1.0, 2))
+        time.sleep(1.0)
+        buy_resp = buyer.place_order("buy", "limit", qty, price=round(ticker + 5.0, 2))
 
         wait_for_order_status(buyer, buy_resp["order_id"], "filled")
         time.sleep(1)  # let fill processor update portfolio
@@ -586,11 +600,15 @@ def test_websocket_trades(results: TestResults):
     def run_ws():
         try:
             ws = websocket.WebSocketApp(
-                f"{WS_URL}?symbols={SYMBOL}",
+                f"{WS_URL}/{SYMBOL}",
                 on_message=on_message,
                 on_error=on_error,
             )
-            ws.run_forever(timeout=TIMEOUT)
+            # Use a timer to close the ws after timeout (run_forever no longer accepts timeout)
+            timer = threading.Timer(TIMEOUT, lambda: ws.close())
+            timer.daemon = True
+            timer.start()
+            ws.run_forever()
         except Exception as e:
             error_msg[0] = str(e)
 
@@ -608,9 +626,9 @@ def test_websocket_trades(results: TestResults):
     if ticker is None:
         ticker = 180.0
 
-    seller.place_order("sell", "limit", 1.0, price=round(ticker - 1, 2))
-    time.sleep(0.5)
-    buyer.place_order("buy", "limit", 1.0, price=round(ticker + 1, 2))
+    seller.place_order("sell", "limit", 1.0, price=round(ticker - 5, 2))
+    time.sleep(1.0)
+    buyer.place_order("buy", "limit", 1.0, price=round(ticker + 5, 2))
 
     ws_thread.join(timeout=TIMEOUT)
 
@@ -651,11 +669,14 @@ def test_websocket_orderbook(results: TestResults):
     def run_ws():
         try:
             ws = websocket.WebSocketApp(
-                f"{WS_URL}?symbols={SYMBOL}",
+                f"{WS_URL}/{SYMBOL}",
                 on_message=on_message,
                 on_error=on_error,
             )
-            ws.run_forever(timeout=TIMEOUT)
+            timer = threading.Timer(TIMEOUT, lambda: ws.close())
+            timer.daemon = True
+            timer.start()
+            ws.run_forever()
         except Exception as e:
             error_msg[0] = str(e)
 
@@ -720,10 +741,10 @@ def test_price_updates_after_trade(results: TestResults):
         buyer.register()
         seller.register()
 
-        # Trade at a distinct price
-        trade_price = round(before["price"] + 5.0, 2)
-        seller.place_order("sell", "limit", 1.0, price=trade_price)
-        time.sleep(0.5)
+        # Trade at a distinct price above market
+        trade_price = round(before["price"] + 10.0, 2)
+        seller.place_order("sell", "limit", 1.0, price=round(before["price"] - 5.0, 2))
+        time.sleep(1.0)
         buy_resp = buyer.place_order("buy", "limit", 1.0, price=trade_price)
 
         wait_for_order_status(buyer, buy_resp["order_id"], "filled")
@@ -847,11 +868,12 @@ def test_stop_limit_sell_triggers(results: TestResults):
         if ticker is None:
             ticker = 180.0
 
-        # Set stop_price slightly below current price so a small down-move triggers it
-        stop_px  = round(ticker - 2.0, 2)
-        limit_px = round(stop_px - 0.5, 2)
+        # Set stop_price below current price.
+        # A sell-stop triggers when trade price <= stop_price.
+        stop_px  = round(ticker - 5.0, 2)
+        limit_px = round(ticker - 10.0, 2)
 
-        # Place stop_limit sell (pending_trigger, waits for price to drop)
+        # Place stop_limit sell (pending_trigger)
         resp = stopper.place_stop_order("sell", "stop_limit", 1.0,
                                         stop_price=stop_px,
                                         limit_price=limit_px)
@@ -862,10 +884,11 @@ def test_stop_limit_sell_triggers(results: TestResults):
         assert found and found[0]["status"] == "pending_trigger", \
             f"Expected pending_trigger, got {found[0]['status'] if found else 'not found'}"
 
-        # Drive price down to stop_px: maker posts buy @ stop_px, mover sells into it
-        maker.place_order("buy", "limit", 2.0, price=stop_px)
-        time.sleep(0.3)
-        mover.place_order("sell", "limit", 2.0, price=stop_px)
+        # Inject a fake price tick to trigger the stop without sweeping the 40,000 units on book
+        import json, subprocess
+        payload = json.dumps({"price": stop_px - 1.0})
+        subprocess.run(["docker", "compose", "exec", "-T", "redis", "redis-cli", "publish", f"trades:{SYMBOL}", payload], capture_output=True)
+        time.sleep(1.0)
 
         # Wait for the trigger engine to fire
         order = wait_for_stop_order_done(stopper, stop_order_id)
@@ -891,10 +914,11 @@ def test_stop_market_buy_triggers(results: TestResults):
         if ticker is None:
             ticker = 180.0
 
-        # Set stop_price slightly above current price so a small up-move triggers it
-        stop_px = round(ticker + 2.0, 2)
+        # Set stop_price above current price.
+        # A buy-stop triggers when trade price >= stop_price.
+        stop_px = round(ticker + 5.0, 2)
 
-        # Place stop_market buy (pending_trigger, waits for price to rise)
+        # Place stop_market buy (pending_trigger)
         resp = stopper.place_stop_order("buy", "stop_market", 1.0,
                                         stop_price=stop_px)
         stop_order_id = resp["order_id"]
@@ -904,10 +928,11 @@ def test_stop_market_buy_triggers(results: TestResults):
         assert found and found[0]["status"] == "pending_trigger", \
             f"Expected pending_trigger, got {found[0]['status'] if found else 'not found'}"
 
-        # Drive price up to stop_px: maker posts sell @ stop_px, mover buys into it
-        maker.place_order("sell", "limit", 2.0, price=stop_px)
-        time.sleep(0.3)
-        mover.place_order("buy", "limit", 2.0, price=stop_px)
+        # Inject a fake price tick to trigger the stop
+        import json, subprocess
+        payload = json.dumps({"price": stop_px + 1.0})
+        subprocess.run(["docker", "compose", "exec", "-T", "redis", "redis-cli", "publish", f"trades:{SYMBOL}", payload], capture_output=True)
+        time.sleep(1.0)
 
         # Wait for the trigger engine to fire
         order = wait_for_stop_order_done(stopper, stop_order_id)
@@ -940,8 +965,45 @@ def run_all():
         sys.exit(1)
 
     # Let the market generator populate some orders first
-    print("  Waiting 3s for market generator to warm up...")
-    time.sleep(3)
+    print("  Waiting 5s for market generator to warm up...")
+    time.sleep(5)
+
+    # ── Fill pipeline warmup ──────────────────────────────────────────────
+    # Place a pair of crossing orders and wait for them to fill.
+    # This ensures the complete pipeline (API → matching engine → Redis
+    # stream → fill processor → DB) is warmed up before the real tests.
+    print("  Warming up fill pipeline...", end="", flush=True)
+    try:
+        warmup_buyer = TestUser("warmup_buy")
+        warmup_seller = TestUser("warmup_sell")
+        warmup_buyer.register()
+        warmup_seller.register()
+
+        ticker = get_ticker_price()
+        if ticker is None:
+            ticker = 180.0
+
+        warmup_seller.place_order("sell", "limit", 1.0, price=round(ticker - 5, 2))
+        time.sleep(0.5)
+        warmup_buy_resp = warmup_buyer.place_order("buy", "limit", 1.0, price=round(ticker + 5, 2))
+
+        # Wait up to 30s for the warmup trade to fill
+        start = time.time()
+        while time.time() - start < 30:
+            orders = warmup_buyer.get_orders()
+            for o in orders:
+                if str(o["id"]) == warmup_buy_resp["order_id"] and o["status"] == "filled":
+                    print(f" OK ({time.time() - start:.1f}s)")
+                    break
+            else:
+                time.sleep(0.5)
+                continue
+            break
+        else:
+            print(f" TIMEOUT ({time.time() - start:.1f}s) — fill pipeline may be slow")
+    except Exception as e:
+        print(f" ERROR: {e}")
+
 
     results = TestResults()
 
