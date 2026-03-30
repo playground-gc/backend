@@ -17,7 +17,7 @@ struct StockConfig {
     std::string symbol;
     double initial_price = 100.0;
     double drift         = 0.0001;   // μ (annualised)
-    double volatility    = 0.02;     // σ (annualised)
+    double volatility    = 0.5;     // σ (annualised)
 };
 
 struct Level {
