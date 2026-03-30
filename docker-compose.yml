@@ -100,6 +100,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       STOCKS_CONFIG: /shared/stocks.yaml
+      MARKET_TPS: "4"
     volumes:
       - ./shared/config/stocks.yaml:/shared/stocks.yaml:ro
     networks: [synthetic-bull-net]

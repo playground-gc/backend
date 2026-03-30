@@ -37,10 +37,13 @@ int main() {
     std::string redis_host    = getenv_or("REDIS_HOST",    "127.0.0.1");
     int         redis_port    = std::stoi(getenv_or("REDIS_PORT",    "6379"));
     std::string stocks_config = getenv_or("STOCKS_CONFIG", "/shared/stocks.yaml");
+    int         market_tps    = std::stoi(getenv_or("MARKET_TPS",    "10"));
 
     std::cout << "[main] Engine:  " << engine_host  << ":" << engine_port  << "\n"
               << "[main] Redis:   " << redis_host   << ":" << redis_port   << "\n"
-              << "[main] Stocks:  " << stocks_config << "\n";
+              << "[main] Stocks:  " << stocks_config << "\n"
+              << "[main] TPS:     " << market_tps   << " tick/s  ("
+              << (1000 / market_tps) << " ms per tick)\n";
 
     // ── Load stocks ──────────────────────────────────────────────────────────
     YAML::Node config;
@@ -85,12 +88,12 @@ int main() {
 
     for (const auto& sc : stocks) {
         generators.emplace_back(
-            std::make_unique<GBMGenerator>(sc, client, redis_host, redis_port));
+            std::make_unique<GBMGenerator>(sc, client, redis_host, redis_port, market_tps));
         generators.back()->start();
     }
 
     std::cout << "[main] " << generators.size()
-              << " GBM generators running at 100 ticks/sec\n";
+              << " GBM generators running at " << market_tps << " ticks/sec\n";
 
     // ── Signal handlers ───────────────────────────────────────────────────────
     std::signal(SIGTERM, handle_signal);

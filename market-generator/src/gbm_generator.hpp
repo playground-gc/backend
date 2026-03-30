@@ -52,7 +52,8 @@ public:
     GBMGenerator(StockConfig  config,
                  OrderClient& order_client,
                  std::string  redis_host,
-                 int          redis_port);
+                 int          redis_port,
+                 int          tps = 10);
 
     void start();
     void stop();
@@ -82,8 +83,9 @@ private:
     std::uniform_real_distribution<double> qty_dist_{1.0, 20.0};
     std::uniform_int_distribution<int>     levels_to_place_{1, 3};
 
-    // ── GBM / timing constants ─────────────────────────────────────────────
-    static constexpr int    TPS          = 100;
+    // ── GBM / timing ───────────────────────────────────────────────────────
+    int     tps_;       // ticks per second (from MARKET_TPS env var)
+    int     tick_ms_;   // sleep duration per tick = 1000 / tps_
     static constexpr double ANNUAL_STEPS = 252.0 * 6.5 * 3600.0;
 
     // ── Book geometry ──────────────────────────────────────────────────────

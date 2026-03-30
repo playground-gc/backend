@@ -16,17 +16,20 @@ using json = nlohmann::json;
 GBMGenerator::GBMGenerator(StockConfig  config,
                              OrderClient& order_client,
                              std::string  redis_host,
-                             int          redis_port)
+                             int          redis_port,
+                             int          tps)
     : config_(std::move(config)),
       order_client_(order_client),
       redis_host_(std::move(redis_host)),
       redis_port_(redis_port),
       current_price_(config_.initial_price),
       prev_price_(config_.initial_price),
-      rng_(std::random_device{}())
+      rng_(std::random_device{}()),
+      tps_(tps > 0 ? tps : 10),
+      tick_ms_(1000 / (tps > 0 ? tps : 10))
 {
     // Pre-compute per-tick GBM parameters once (Itô-corrected, square-root-of-time rule).
-    double ticks_per_year = static_cast<double>(TPS) * ANNUAL_STEPS;
+    double ticks_per_year = static_cast<double>(tps_) * ANNUAL_STEPS;
     sigma_tick_ = config_.volatility / std::sqrt(ticks_per_year);
     double mu_tick = config_.drift / ticks_per_year;
     drift_term_ = mu_tick - 0.5 * sigma_tick_ * sigma_tick_;
@@ -70,7 +73,7 @@ void GBMGenerator::run() {
         std::cout << "[GBM:" << config_.symbol << "] Seeded initial price " << current_price_ << "\n";
     }
 
-    constexpr int SLEEP_MS = 1000 / TPS;  // 10 ms per tick
+    // tick_ms_ = 1000 / tps_  (set in constructor from MARKET_TPS env var)
 
     while (running_) {
         ++tick_count_;
@@ -105,7 +108,7 @@ void GBMGenerator::run() {
         // 5. Place orders in the matching engine so it stays liquid
         place_orders(book, levels_to_place_(rng_));
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(tick_ms_));
     }
 
     std::cout << "[GBM:" << config_.symbol << "] stopped\n";
