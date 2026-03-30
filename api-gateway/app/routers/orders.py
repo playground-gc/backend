@@ -258,7 +258,7 @@ async def list_orders(
     user_id = current_user["user_id"]
     query = (
         "SELECT id, symbol, order_type, side, price, stop_price, limit_price, "
-        "quantity, filled_qty, status, expires_at, created_at "
+        "quantity, filled_qty, status, expires_at, created_at, updated_at "
         "FROM orders WHERE user_id=$1"
     )
     params: list = [user_id]

@@ -3,28 +3,28 @@ stocks:
     name: "Apple Synthetic"
     initial_price: 180.0
     drift: 0.0001
-    volatility: 0.02
+    volatility: 0.47
 
   - symbol: "GOOGL_S"
     name: "Google Synthetic"
     initial_price: 140.0
     drift: 0.0002
-    volatility: 0.025
+    volatility: 0.53
 
   - symbol: "TSLA_S"
     name: "Tesla Synthetic"
     initial_price: 200.0
     drift: 0.0003
-    volatility: 0.04
+    volatility: 0.58
 
   - symbol: "MSFT_S"
     name: "Microsoft Synthetic"
     initial_price: 380.0
     drift: 0.0001
-    volatility: 0.018
+    volatility: 0.44
 
   - symbol: "AMZN_S"
     name: "Amazon Synthetic"
     initial_price: 170.0
     drift: 0.00015
-    volatility: 0.022
+    volatility: 0.51

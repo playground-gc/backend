@@ -119,10 +119,25 @@ async def process_trade(pool: asyncpg.Pool, trade: dict) -> None:
                         """,
                         uuid.UUID(buyer_id), symbol, quantity, price,
                     )
-                    await conn.execute(
-                        "UPDATE users SET balance = balance - $2 WHERE id = $1 AND balance >= $2",
+                    row = await conn.fetchrow(
+                        """
+                        UPDATE users SET balance = balance - $2
+                        WHERE id = $1 AND balance >= $2
+                        RETURNING balance
+                        """,
                         uuid.UUID(buyer_id), cost,
                     )
+                    if row:
+                        await conn.execute(
+                            """
+                            INSERT INTO balance_history
+                                (user_id, delta, balance, reason, symbol, quantity, price, trade_id)
+                            VALUES ($1, $2, $3, 'trade_buy', $4, $5, $6, $7)
+                            """,
+                            uuid.UUID(buyer_id), -cost, float(row["balance"]),
+                            symbol, quantity, price,
+                            uuid.UUID(tid) if (tid := _try_uuid(trade.get("trade_id"))) else None,
+                        )
         except Exception as e:
             log.warning("Buyer portfolio/balance update failed for %s: %s", buyer_id, e)
 
@@ -139,10 +154,25 @@ async def process_trade(pool: asyncpg.Pool, trade: dict) -> None:
                         """,
                         uuid.UUID(seller_id), symbol, quantity,
                     )
-                    await conn.execute(
-                        "UPDATE users SET balance = balance + $2 WHERE id = $1",
+                    row = await conn.fetchrow(
+                        """
+                        UPDATE users SET balance = balance + $2
+                        WHERE id = $1
+                        RETURNING balance
+                        """,
                         uuid.UUID(seller_id), cost,
                     )
+                    if row:
+                        await conn.execute(
+                            """
+                            INSERT INTO balance_history
+                                (user_id, delta, balance, reason, symbol, quantity, price, trade_id)
+                            VALUES ($1, $2, $3, 'trade_sell', $4, $5, $6, $7)
+                            """,
+                            uuid.UUID(seller_id), cost, float(row["balance"]),
+                            symbol, quantity, price,
+                            uuid.UUID(tid) if (tid := _try_uuid(trade.get("trade_id"))) else None,
+                        )
         except Exception as e:
             log.warning("Seller portfolio/balance update failed for %s: %s", seller_id, e)
 

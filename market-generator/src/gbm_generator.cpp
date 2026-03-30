@@ -217,7 +217,7 @@ void GBMGenerator::place_orders(const Book& book, int n) {
     for (int i = 0; i < n; ++i) {
         // Bid
         {
-            double qty = std::round(qty_dist_(rng_) * 100.0) / 100.0;
+            int qty = static_cast<int>(qty_dist_(rng_));
             json order;
             order["action"]    = "place";
             order["order_id"]  = make_order_id();
@@ -232,7 +232,7 @@ void GBMGenerator::place_orders(const Book& book, int n) {
         }
         // Ask
         {
-            double qty = std::round(qty_dist_(rng_) * 100.0) / 100.0;
+            int qty = static_cast<int>(qty_dist_(rng_));
             json order;
             order["action"]    = "place";
             order["order_id"]  = make_order_id();

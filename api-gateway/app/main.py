@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import get_pool, close_pool
 from app.engine_client import get_engine_pool, close_engine_pool
 from app.redis_client import get_redis, close_redis
-from app.routers import auth, orders, market
+from app.routers import auth, orders, market, user
 from app.fill_processor import run_fill_processor
 
 logging.basicConfig(
@@ -75,6 +75,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(orders.router)
 app.include_router(market.router)
+app.include_router(user.router)
 
 
 # ─── Health check ────────────────────────────────────────────────────────────
