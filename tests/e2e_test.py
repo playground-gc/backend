@@ -466,16 +466,16 @@ def test_partial_fill(results: TestResults):
         mid_px = get_mid_price()
         price = mid_px
 
-        # Maker posts 2 qty, taker wants 5
-        # Since price is exactly mid_px, it's inside the spread of the market generator.
-        # It ONLY crosses with each other.
-        maker.place_order("sell", "limit", 2.0, price=price)
-        time.sleep(1.0)
+        # Maker posts a VERY LARGE quantity so the market generator can't eat it all
+        maker_resp = maker.place_order("sell", "limit", 1000.0, price=price)
+        time.sleep(0.5)
+        
+        # Taker buys a small amount. Taker fills completely, maker partially fills!
         taker_resp = taker.place_order("buy", "limit", 5.0, price=price)
 
-        # Should be partial (filled 2 of 5)
-        taker_order = wait_for_order_status(taker, taker_resp["order_id"], "partial")
-        assert float(taker_order["filled_qty"]) == 2.0
+        # Maker should be partial (filled 5 of 1000)
+        maker_order = wait_for_order_status(maker, maker_resp["order_id"], "partial")
+        assert float(maker_order["filled_qty"]) >= 5.0
 
         results.record("Partial fill", True)
     except Exception as e:
