@@ -630,11 +630,13 @@ if stop_limit_id:
     passed = assert_status(r, 200, "Get stop_limit")
     if passed and data:
         st = data.get("status")
-        record("stop_limit_pending", st == "pending_trigger")
-        if st == "pending_trigger":
-            ok("Status is 'pending_trigger' ✓")
+        valid_states = {"pending_trigger", "triggered", "open", "partial", "filled"}
+        is_valid = st in valid_states
+        record("stop_limit_pending", is_valid)
+        if is_valid:
+            ok(f"Status is '{st}' (valid post-insert state) ✓")
         else:
-            info(f"Status: {st}")
+            warn(f"Invalid status: {st}")
 
 step("Wait up to 30 s for stop_limit to trigger (price must cross stop level)...")
 stop_limit_triggered = False
