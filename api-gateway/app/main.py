@@ -17,6 +17,7 @@ from app.engine_client import get_engine_pool, close_engine_pool
 from app.redis_client import get_redis, close_redis
 from app.routers import auth, orders, market, user
 from app.fill_processor import run_fill_processor
+from app.pruner import run_pruner
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,27 +31,29 @@ async def lifespan(app: FastAPI):
     log.info("Starting API Gateway...")
 
     # Initialise connection pools
-    await get_pool()
+    pool  = await get_pool()
     log.info("PostgreSQL pool ready")
 
-    await get_redis()
+    redis = await get_redis()
     log.info("Redis client ready")
 
     await get_engine_pool()
     log.info("Engine connection pool ready")
 
-    # Start fill processor background task
-    fill_task = asyncio.create_task(run_fill_processor())
-    log.info("Fill processor started")
+    # Start background tasks
+    fill_task  = asyncio.create_task(run_fill_processor())
+    prune_task = asyncio.create_task(run_pruner(pool, redis, settings.symbols))
+    log.info("Fill processor and pruner started")
 
     yield
 
     # Teardown
-    fill_task.cancel()
-    try:
-        await fill_task
-    except asyncio.CancelledError:
-        pass
+    for task in (fill_task, prune_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await close_engine_pool()
     await close_redis()
     await close_pool()

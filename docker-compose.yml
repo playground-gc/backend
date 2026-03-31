@@ -157,6 +157,13 @@ services:
     env_file: .env
     environment:
       STOCKS_CONFIG: /shared/config/stocks.yaml
+      # ── Data retention limits ──────────────────────────────────────────────
+      MAX_TRADES:          "100000"
+      MAX_ORDERS:          "50000"
+      MAX_BALANCE_HISTORY: "10000"
+      MAX_CANDLES_PG:      "5000"
+      MAX_STREAM_LEN:      "10000"
+      PRUNE_INTERVAL_S:    "60"
     volumes:
       - ./shared:/shared:ro
     networks: [synthetic-bull-net]
