@@ -58,15 +58,15 @@ async def place_order(
             user_id,
             body.symbol,
         )
-        current_qty = row["quantity"] if row else 0.0
+        current_qty = float(row["quantity"]) if row else 0.0
 
         # Calculate active sell orders quantity
-        active_sells = await db.fetchval(
+        active_sells = float(await db.fetchval(
             "SELECT COALESCE(SUM(quantity - filled_qty), 0) FROM orders "
             "WHERE user_id = $1 AND symbol = $2 AND side = 'sell' AND status IN ('open', 'partial', 'pending_trigger')",
             user_id,
             body.symbol,
-        )
+        ))
 
         if current_qty - active_sells - body.quantity < -settings.MAX_SHORT_INVENTORY:
             raise HTTPException(
