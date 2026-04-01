@@ -203,35 +203,52 @@ async def market_maker_symbol(
             bid_price = round(bid_price, 6)
             ask_price = round(ask_price, 6)
 
-            # Soft inventory cap: skip the side that would worsen the position.
+            # Soft inventory caps.
+            # Long side: stop buying if already at Q_MAX.
+            # Short side: stop selling if already at -SHORT_MAX (user's holdings
+            # minus SHORT_MAX extra).  This is evaluated against the local q
+            # estimate which is updated in real-time via fill detection below.
             place_bid = agent.q < settings.Q_MAX
-            place_ask = agent.q > -settings.Q_MAX
+            place_ask = agent.q > -settings.SHORT_MAX
 
-            # ── 4. Cancel previous quotes ────────────────────────────────────
-            cancel_tasks = []
-            if agent.active_bid_id:
-                cancel_tasks.append(
-                    client.delete(
-                        f"/api/v1/orders/{agent.active_bid_id}", headers=headers
-                    )
-                )
-            if agent.active_ask_id:
-                cancel_tasks.append(
-                    client.delete(
-                        f"/api/v1/orders/{agent.active_ask_id}", headers=headers
-                    )
-                )
-
-            # Clear tracked IDs before awaiting so a crash here doesn't leave
-            # stale references; any unfilled cancel will be retried next tick.
+            # ── 4. Cancel previous quotes (fill detection) ───────────────────
+            # A 404 on DELETE means the order was already matched (filled), not
+            # just pending.  We use this to update q in real-time instead of
+            # waiting for the 5-second portfolio sync.
+            prev_bid_id = agent.active_bid_id
+            prev_ask_id = agent.active_ask_id
             agent.active_bid_id = ""
             agent.active_ask_id = ""
 
-            if cancel_tasks:
-                results = await asyncio.gather(*cancel_tasks, return_exceptions=True)
-                for r in results:
+            cancel_coros = []
+            cancel_sides = []
+            if prev_bid_id:
+                cancel_coros.append(
+                    client.delete(f"/api/v1/orders/{prev_bid_id}", headers=headers)
+                )
+                cancel_sides.append("bid")
+            if prev_ask_id:
+                cancel_coros.append(
+                    client.delete(f"/api/v1/orders/{prev_ask_id}", headers=headers)
+                )
+                cancel_sides.append("ask")
+
+            if cancel_coros:
+                results = await asyncio.gather(*cancel_coros, return_exceptions=True)
+                for side, r in zip(cancel_sides, results):
                     if isinstance(r, Exception):
-                        log.debug("[%s] Cancel error: %s", symbol, r)
+                        log.debug("[%s] Cancel %s error: %s", symbol, side, r)
+                    elif r.status_code == 404:
+                        # Order was filled before we could cancel it.
+                        if side == "bid":
+                            agent.q += 1
+                            log.debug("[%s] Bid fill detected, q=%d", symbol, agent.q)
+                        else:
+                            agent.q -= 1
+                            log.debug("[%s] Ask fill detected, q=%d", symbol, agent.q)
+                        # Re-evaluate ask guard after fill detection so we don't
+                        # place a sell that would breach SHORT_MAX this same tick.
+                        place_ask = agent.q > -settings.SHORT_MAX
 
             # ── 5. Place new bid and ask ─────────────────────────────────────
             if place_bid:

@@ -26,10 +26,15 @@ class Settings(BaseSettings):
     #           skew stays active indefinitely (open-ended running).
     T_TICKS: int = 500
 
-    # Q_MAX   — soft inventory cap per symbol.
-    #           The strategy does NOT hard-clip; quote placement is skipped
-    #           when |q| >= Q_MAX to prevent runaway positions.
+    # Q_MAX   — soft long inventory cap per symbol.
+    #           Quote placement is skipped when q >= Q_MAX to prevent runaway
+    #           long positions.
     Q_MAX: int = 20
+
+    # SHORT_MAX — maximum allowed short position (shares sold beyond holdings).
+    #             A user with X shares may sell at most X + SHORT_MAX shares in
+    #             total.  Once q <= -SHORT_MAX, no further sell orders are placed.
+    SHORT_MAX: int = 5
 
     # TPS     — ticks per second, used to calibrate the Poisson fill intensity.
     #           Should match MARKET_TPS of the market-generator.

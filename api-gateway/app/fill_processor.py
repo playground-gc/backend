@@ -113,8 +113,12 @@ async def process_trade(pool: asyncpg.Pool, trade: dict) -> None:
                         INSERT INTO portfolios (user_id, symbol, quantity, avg_cost)
                         VALUES ($1, $2, $3, $4)
                         ON CONFLICT (user_id, symbol) DO UPDATE
-                        SET avg_cost = (portfolios.avg_cost * portfolios.quantity + $4 * $3)
-                                       / (portfolios.quantity + $3),
+                        SET avg_cost = CASE
+                                          WHEN portfolios.quantity + $3 > 0
+                                          THEN (portfolios.avg_cost * portfolios.quantity + $4 * $3)
+                                               / (portfolios.quantity + $3)
+                                          ELSE $4
+                                       END,
                             quantity = portfolios.quantity + $3
                         """,
                         uuid.UUID(buyer_id), symbol, quantity, price,
@@ -148,9 +152,10 @@ async def process_trade(pool: asyncpg.Pool, trade: dict) -> None:
                 async with conn.transaction():
                     await conn.execute(
                         """
-                        UPDATE portfolios
-                        SET quantity = GREATEST(quantity - $3, 0)
-                        WHERE user_id = $1 AND symbol = $2
+                        INSERT INTO portfolios (user_id, symbol, quantity, avg_cost)
+                        VALUES ($1, $2, -$3, 0)
+                        ON CONFLICT (user_id, symbol) DO UPDATE
+                        SET quantity = portfolios.quantity - $3
                         """,
                         uuid.UUID(seller_id), symbol, quantity,
                     )
