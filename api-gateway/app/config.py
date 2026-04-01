@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings
-import yaml
 import os
+
+import yaml
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -14,6 +15,7 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 1440
 
     STOCKS_CONFIG: str = "/shared/stocks.yaml"
+    MAX_SHORT_INVENTORY: int = 5
 
     @property
     def symbols(self) -> list[str]:

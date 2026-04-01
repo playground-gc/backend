@@ -1,18 +1,24 @@
 import json
+import logging
 import time
 import uuid
-import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import get_current_user
+from app.config import settings
 from app.database import get_db
 from app.engine_client import get_engine_pool
 from app.redis_client import get_redis
-from app.schemas import OrderDetail, OrderRequest, OrderResponse, OrderStatus, StopOrderResponse
-from app.config import settings
+from app.schemas import (
+    OrderDetail,
+    OrderRequest,
+    OrderResponse,
+    OrderStatus,
+    StopOrderResponse,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["orders"])
 log = logging.getLogger(__name__)
@@ -21,6 +27,7 @@ _STOP_TYPES = {"stop_limit", "stop_market"}
 
 
 # ─── Place order ───────────────────────────────────────────────────────────────
+
 
 @router.post("/orders", status_code=201)
 async def place_order(
@@ -41,8 +48,31 @@ async def place_order(
     if body.symbol not in settings.symbols:
         raise HTTPException(status_code=400, detail=f"Unknown symbol: {body.symbol}")
 
-    user_id  = current_user["user_id"]
+    user_id = current_user["user_id"]
     order_id = str(uuid.uuid4())
+
+    if body.side.value == "sell":
+        # Check short selling limit
+        row = await db.fetchrow(
+            "SELECT quantity FROM portfolios WHERE user_id = $1 AND symbol = $2",
+            user_id,
+            body.symbol,
+        )
+        current_qty = row["quantity"] if row else 0.0
+
+        # Calculate active sell orders quantity
+        active_sells = await db.fetchval(
+            "SELECT COALESCE(SUM(quantity - filled_qty), 0) FROM orders "
+            "WHERE user_id = $1 AND symbol = $2 AND side = 'sell' AND status IN ('open', 'partial', 'pending_trigger')",
+            user_id,
+            body.symbol,
+        )
+
+        if current_qty - active_sells - body.quantity < -settings.MAX_SHORT_INVENTORY:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Short selling limit exceeded. Max allowed short position is {settings.MAX_SHORT_INVENTORY}.",
+            )
 
     # ── Stop orders ────────────────────────────────────────────────────────────
     if body.order_type.value in _STOP_TYPES:
@@ -56,10 +86,15 @@ async def place_order(
                      quantity, status, expires_at)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_trigger',$9)
                 """,
-                order_id, user_id, body.symbol,
-                body.order_type.value, body.side.value,
-                body.stop_price, body.limit_price,
-                body.quantity, expires_at,
+                order_id,
+                user_id,
+                body.symbol,
+                body.order_type.value,
+                body.side.value,
+                body.stop_price,
+                body.limit_price,
+                body.quantity,
+                expires_at,
             )
         except Exception as e:
             log.error("DB insert failed for stop order: %s", e)
@@ -68,17 +103,19 @@ async def place_order(
         # Notify trigger engine via Redis after DB commit
         try:
             redis = await get_redis()
-            payload = json.dumps({
-                "order_id":    order_id,
-                "user_id":     user_id,
-                "symbol":      body.symbol,
-                "side":        body.side.value,
-                "type":        body.order_type.value,
-                "stop_price":  body.stop_price,
-                "limit_price": body.limit_price or 0.0,
-                "quantity":    body.quantity,
-                "expires_at":  expires_at.isoformat(),
-            })
+            payload = json.dumps(
+                {
+                    "order_id": order_id,
+                    "user_id": user_id,
+                    "symbol": body.symbol,
+                    "side": body.side.value,
+                    "type": body.order_type.value,
+                    "stop_price": body.stop_price,
+                    "limit_price": body.limit_price or 0.0,
+                    "quantity": body.quantity,
+                    "expires_at": expires_at.isoformat(),
+                }
+            )
             await redis.publish("stop_orders:new", payload)
         except Exception as e:
             log.warning("Redis publish for stop order failed: %s", e)
@@ -116,22 +153,20 @@ async def place_order(
     # Forward to the matching engine (fire-and-forget over TCP).
     # The engine wire format uses "type" as the key name.
     engine_msg = {
-        "action":    "place",
-        "order_id":  order_id,
-        "user_id":   user_id,
-        "symbol":    body.symbol,
-        "type":      body.order_type.value,
-        "side":      body.side.value,
-        "price":     body.price,
-        "quantity":  body.quantity,
+        "action": "place",
+        "order_id": order_id,
+        "user_id": user_id,
+        "symbol": body.symbol,
+        "type": body.order_type.value,
+        "side": body.side.value,
+        "price": body.price,
+        "quantity": body.quantity,
         "timestamp": int(time.time() * 1000),
     }
     try:
         await engine.send_order(engine_msg)
     except Exception as e:
-        await db.execute(
-            "UPDATE orders SET status='failed' WHERE id=$1", order_id
-        )
+        await db.execute("UPDATE orders SET status='failed' WHERE id=$1", order_id)
         log.error("Engine send failed: %s", e)
         raise HTTPException(status_code=503, detail="Matching engine unavailable")
 
@@ -171,6 +206,7 @@ async def get_order(
 
 # ─── Cancel order ──────────────────────────────────────────────────────────────
 
+
 @router.delete("/orders/{order_id}", status_code=200)
 async def cancel_order(
     order_id: str,
@@ -205,19 +241,19 @@ async def cancel_order(
             detail="Market orders execute immediately and cannot be cancelled",
         )
 
-    await db.execute(
-        "UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id
-    )
+    await db.execute("UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id)
 
     if row["status"] == "pending_trigger":
         # Order was never sent to the matching engine; notify trigger engine to drop it
         try:
             redis = await get_redis()
-            payload = json.dumps({
-                "order_id": order_id,
-                "symbol":   row["symbol"],
-                "user_id":  user_id,
-            })
+            payload = json.dumps(
+                {
+                    "order_id": order_id,
+                    "symbol": row["symbol"],
+                    "user_id": user_id,
+                }
+            )
             await redis.publish("stop_orders:cancel", payload)
         except Exception as e:
             log.warning("Redis publish for stop cancel failed: %s", e)
@@ -225,10 +261,10 @@ async def cancel_order(
 
     # For open / partial / triggered orders: notify matching engine
     cancel_msg = {
-        "action":   "cancel",
+        "action": "cancel",
         "order_id": order_id,
-        "symbol":   row["symbol"],
-        "user_id":  user_id,
+        "symbol": row["symbol"],
+        "user_id": user_id,
     }
     try:
         await engine.send_order(cancel_msg)
@@ -239,6 +275,7 @@ async def cancel_order(
 
 
 # ─── List orders ───────────────────────────────────────────────────────────────
+
 
 @router.get("/orders", response_model=list[OrderDetail])
 async def list_orders(
