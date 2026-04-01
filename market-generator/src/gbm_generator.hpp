@@ -136,7 +136,7 @@ private:
     static constexpr double BASE_SIZE        = 30.0;    // size at best level (k=0)
     static constexpr double SIZE_DECAY       = 0.30;    // exponential decay rate across levels
     static constexpr double SIZE_NOISE_FRAC  = 0.35;    // fractional Gaussian noise on sizes
-    static constexpr double VOL_SENSITIVITY  = 6.0;     // volMult = 1 + VOL_SENSITIVITY*|logRet|/sigma_tick
+    static constexpr double VOL_SENSITIVITY  = 12.0;     // volMult = 1 + VOL_SENSITIVITY*|logRet|/sigma_tick
 
     // ── F1: Regime parameters ───────────────────────────────────────────────
     static constexpr double REGIME_SWITCH_PROB   = 0.0002;  // per-tick prob (~50 s at 100 tps)
