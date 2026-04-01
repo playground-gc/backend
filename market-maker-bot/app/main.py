@@ -6,10 +6,10 @@ adjusted for inventory risk according to the Avellaneda-Stoikov model.
 """
 
 import asyncio
+import json
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import List
 
 import httpx
 import redis.asyncio as aioredis
@@ -28,8 +28,8 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class ASAgent:
-    q: float = 0.0  # Current inventory
-    tick_count: int = 0  # Running tick counter
+    q: int = 0  # Current inventory (signed, integer shares)
+    tick_count: int = 0  # Local tick counter for periodic inventory sync
     prev_mid: float = 0.0  # Previous mid price for vol estimation
     var_ema: float = 1e-8  # EMA of per-tick log-return variance
     active_bid_id: str = ""
@@ -108,8 +108,9 @@ def compute_quotes(
 
     Returns (reservation_price, bid_price, ask_price)
     """
-    # Ticks remaining to horizon (revolving horizon logic)
-    rem = max(settings.T_TICKS - (tick % settings.T_TICKS), 0)
+    # Ticks remaining to horizon (revolving horizon: resets every T_TICKS ticks).
+    # tick % T_TICKS is always in [0, T_TICKS-1], so rem is always in [1, T_TICKS].
+    rem = settings.T_TICKS - (tick % settings.T_TICKS)
 
     # Dollar variance
     sigma_dollar = mid * sigma_tick
@@ -150,55 +151,63 @@ async def market_maker_symbol(
 ) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     agent = ASAgent()
-    refresh_interval = 1.0 / settings.TPS
 
-    # Initialize inventory
-    agent.q = await fetch_inventory(client, symbol, headers)
-    log.info("[%s] Starting AS Market Maker. Initial inventory: %.2f", symbol, agent.q)
+    # Initialize inventory from portfolio
+    agent.q = int(await fetch_inventory(client, symbol, headers))
+    log.info("[%s] Starting AS Market Maker. Initial inventory: %d", symbol, agent.q)
 
-    while True:
-        try:
-            # ── 1. Get mid price from Redis ──────────────────────────────────
-            price_data = await redis_conn.hgetall(f"price:{symbol}")
-            if not price_data:
-                await asyncio.sleep(refresh_interval)
+    # Subscribe to the market generator's pub/sub channel so we process exactly
+    # one quote update per market tick (not a timer-driven polling loop).
+    pubsub = redis_conn.pubsub()
+    await pubsub.subscribe(f"market_data:{symbol}")
+    log.info("[%s] Subscribed to market_data:%s", symbol, symbol)
+
+    try:
+        async for message in pubsub.listen():
+            if message["type"] != "message":
                 continue
 
-            mid = float(price_data.get("price", 0))
+            try:
+                data = json.loads(message["data"])
+            except Exception as e:
+                log.debug("[%s] Bad message payload: %s", symbol, e)
+                continue
+
+            mid = float(data.get("mid", 0))
             if mid <= 0:
-                await asyncio.sleep(refresh_interval)
                 continue
 
-            # ── 2. Update Volatility Estimate (F2) ───────────────────────────
+            # Market tick counter drives the revolving horizon (rem calculation).
+            market_tick = int(data.get("tick", agent.tick_count))
+
+            # ── 1. Update Volatility Estimate (EMA of log-return variance) ───
             if agent.prev_mid > 0:
                 log_ret = math.log(mid / agent.prev_mid)
-                # EMA of variance
                 agent.var_ema = (
-                    settings.VOL_EMA_ALPHA * (log_ret**2)
+                    settings.VOL_EMA_ALPHA * (log_ret ** 2)
                     + (1.0 - settings.VOL_EMA_ALPHA) * agent.var_ema
                 )
             agent.prev_mid = mid
             sigma_tick = math.sqrt(agent.var_ema)
 
-            # ── 3. Sync Inventory (Periodically) ─────────────────────────────
-            if agent.tick_count % (settings.TPS * 5) == 0:  # Sync every 5 seconds
-                agent.q = await fetch_inventory(client, symbol, headers)
-
+            # ── 2. Sync Inventory (every 5 seconds worth of ticks) ───────────
             agent.tick_count += 1
+            if agent.tick_count % (settings.TPS * 5) == 0:
+                agent.q = int(await fetch_inventory(client, symbol, headers))
 
-            # ── 4. Compute AS Quotes ─────────────────────────────────────────
+            # ── 3. Compute AS Quotes ─────────────────────────────────────────
             reservation, bid_price, ask_price = compute_quotes(
-                mid=mid, sigma_tick=sigma_tick, q=agent.q, tick=agent.tick_count
+                mid=mid, sigma_tick=sigma_tick, q=agent.q, tick=market_tick
             )
 
             bid_price = round(bid_price, 6)
             ask_price = round(ask_price, 6)
 
-            # Check inventory limits before placing
+            # Soft inventory cap: skip the side that would worsen the position.
             place_bid = agent.q < settings.Q_MAX
             place_ask = agent.q > -settings.Q_MAX
 
-            # ── 5. Cancel previous quotes ────────────────────────────────────
+            # ── 4. Cancel previous quotes ────────────────────────────────────
             cancel_tasks = []
             if agent.active_bid_id:
                 cancel_tasks.append(
@@ -213,6 +222,8 @@ async def market_maker_symbol(
                     )
                 )
 
+            # Clear tracked IDs before awaiting so a crash here doesn't leave
+            # stale references; any unfilled cancel will be retried next tick.
             agent.active_bid_id = ""
             agent.active_ask_id = ""
 
@@ -222,14 +233,8 @@ async def market_maker_symbol(
                     if isinstance(r, Exception):
                         log.debug("[%s] Cancel error: %s", symbol, r)
 
-            # ── 6. Place new bid and ask ─────────────────────────────────────
-            place_tasks = []
+            # ── 5. Place new bid and ask ─────────────────────────────────────
             if place_bid:
-                place_tasks.append(("buy", bid_price))
-            if place_ask:
-                place_tasks.append(("sell", ask_price))
-
-            for side, price in place_tasks:
                 try:
                     resp = await client.post(
                         "/api/v1/orders",
@@ -237,26 +242,39 @@ async def market_maker_symbol(
                         json={
                             "symbol": symbol,
                             "type": "limit",
-                            "side": side,
-                            "price": price,
-                            "quantity": 1,  # Based on pure AS strategy default
+                            "side": "buy",
+                            "price": bid_price,
+                            "quantity": 1,
                         },
                     )
                     if resp.status_code in (200, 201):
-                        oid = resp.json()["order_id"]
-                        if side == "buy":
-                            agent.active_bid_id = oid
-                        else:
-                            agent.active_ask_id = oid
+                        agent.active_bid_id = resp.json()["order_id"]
                 except Exception as e:
-                    log.debug("[%s] Place order error [%s]: %s", symbol, side, e)
+                    log.debug("[%s] Place bid error: %s", symbol, e)
 
-        except asyncio.CancelledError:
-            return
-        except Exception as e:
-            log.error("[%s] Error: %s", symbol, e)
+            if place_ask:
+                try:
+                    resp = await client.post(
+                        "/api/v1/orders",
+                        headers=headers,
+                        json={
+                            "symbol": symbol,
+                            "type": "limit",
+                            "side": "sell",
+                            "price": ask_price,
+                            "quantity": 1,
+                        },
+                    )
+                    if resp.status_code in (200, 201):
+                        agent.active_ask_id = resp.json()["order_id"]
+                except Exception as e:
+                    log.debug("[%s] Place ask error: %s", symbol, e)
 
-        await asyncio.sleep(refresh_interval)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await pubsub.unsubscribe(f"market_data:{symbol}")
+        await pubsub.aclose()
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
