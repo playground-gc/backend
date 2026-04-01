@@ -10,10 +10,34 @@ class Settings(BaseSettings):
     BOT_PASSWORD: str = "mmbot_pass"
     STOCKS_CONFIG: str = "/shared/stocks.yaml"
 
-    # Market making parameters
-    SPREAD: float = 0.001         # 0.1% half-spread
-    QUOTE_SIZE: float = 10.0      # units per side
-    REFRESH_INTERVAL_S: float = 0.5
+    # ── Avellaneda-Stoikov strategy parameters ─────────────────────────────
+    # gamma   — risk-aversion coefficient.
+    #           Low (0.001): near risk-neutral, wide inventory tolerance.
+    #           High (0.1):  aggressively skews quotes to flatten inventory.
+    #           Scale with the market TPS: lower gamma for lower TPS.
+    GAMMA: float = 0.001
+
+    # k       — order-arrival intensity decay rate per unit of spread.
+    #           Higher k → fills concentrate near tight quotes.
+    K: float = 1.5
+
+    # T_TICKS — rolling strategy horizon in ticks.
+    #           The bot resets the horizon every T_TICKS ticks so inventory
+    #           skew stays active indefinitely (open-ended running).
+    T_TICKS: int = 500
+
+    # Q_MAX   — soft inventory cap per symbol.
+    #           The strategy does NOT hard-clip; quote placement is skipped
+    #           when |q| >= Q_MAX to prevent runaway positions.
+    Q_MAX: int = 20
+
+    # TPS     — ticks per second, used to calibrate the Poisson fill intensity.
+    #           Should match MARKET_TPS of the market-generator.
+    TPS: int = 10
+
+    # VOL_EMA_ALPHA — EMA decay for the local per-tick vol estimate (F2).
+    #                 Matches gbm.cpp vol_ema_alpha (half-life ≈ 139 ticks).
+    VOL_EMA_ALPHA: float = 0.005
 
     @property
     def symbols(self) -> list[str]:

@@ -595,36 +595,39 @@ Redis pub/sub channels
 
 **Location**: `market-maker-bot/`
 **Language**: Python async
-**Function**: Continuously quotes both sides of the book for all 5 symbols, providing liquidity so user orders fill instantly.
+**Function**: Continuously quotes both sides of the book for all symbols using the risk-adjusted **Avellaneda-Stoikov** pricing model to manage inventory risk.
 
-#### Strategy: Symmetric Spread Quoting
+#### Strategy: Avellaneda-Stoikov (Inventory Skew)
 
-```
-Every 500ms per symbol:
-  1. Read mid-price from Redis: GET price:{symbol}
-  2. Compute:
-     bid_price = mid × (1 - SPREAD/2) = mid × 0.9995
-     ask_price = mid × (1 + SPREAD/2) = mid × 1.0005
-  3. Cancel all existing open orders for this symbol
-  4. POST limit buy:  {symbol, side='buy',  price=bid_price, qty=10}
-  5. POST limit sell: {symbol, side='sell', price=ask_price, qty=10}
+```text
+Every tick (100ms by default) per symbol:
+  1. Fetch mid-price from Redis and calculate per-tick variance via EMA
+  2. Sync inventory (q) from the portfolio periodically
+  3. Compute reservation price (r) adjusted for inventory risk:
+     r = mid - q * γ * σ² * rem
+  4. Compute spread distances:
+     δ_fixed = (1/γ) * ln(1 + γ/k)
+     bid = r - δ_fixed
+     ask = r + δ_fixed
+  5. Cancel existing quotes and POST new limit buy/sell orders
 ```
 
 #### Parameters
 
-| Parameter | Value | Effect |
-|-----------|-------|--------|
-| `SPREAD` | 0.001 (0.1%) | Half-spread on each side |
-| `QUOTE_SIZE` | 10 units | Size per side |
-| `REFRESH_INTERVAL` | 500ms | Quote refresh rate |
-| Symbols | All 5 | Simultaneous async quoting |
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `GAMMA` | 0.001 | Risk-aversion coefficient. Higher values aggressively skew quotes. |
+| `K` | 1.5 | Order-arrival intensity decay rate per unit of spread. |
+| `T_TICKS` | 500 | Rolling strategy horizon in ticks. |
+| `Q_MAX` | 20 | Soft inventory cap per symbol to prevent runaway positions. |
+| `TPS` | 10 | Ticks per second for update frequency. |
 
 #### Economic Role
 
-The market maker earns the bid-ask spread on round-trip trades. Its presence ensures:
-1. User limit orders have a counterparty to fill against immediately
-2. Market orders always have resting liquidity
-3. The orderbook always shows a two-sided quote
+The market maker earns the bid-ask spread on round-trip trades while actively managing the risk of holding unbalanced inventory. Its presence ensures:
+1. User limit orders have a counterparty to fill against immediately.
+2. Market orders always have resting liquidity.
+3. The orderbook dynamically adjusts to volume and one-sided order flow.
 
 ---
 
