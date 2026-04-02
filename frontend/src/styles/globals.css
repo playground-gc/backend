@@ -1,0 +1,22 @@
+/*
+ * globals.css
+ * Injects Tailwind's base, components, and utilities layers.
+ * Also defines CSS custom properties (design tokens) for the NextBull dark theme
+ * so that non-Tailwind code (e.g. lightweight-charts overrides) can reference them.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-surface: #0f1117;
+  --color-surface-raised: #161b27;
+  --color-surface-border: #1e2535;
+  --color-brand: #f59e0b;
+  --color-bull: #22c55e;
+  --color-bear: #ef4444;
+  --color-muted: #6b7280;
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+}

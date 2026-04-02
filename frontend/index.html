@@ -1,0 +1,3912 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Synthetic Bull — Professional Trading Terminal</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700;800;900&family=Montserrat:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/lenis@1.1.13/dist/lenis.css">
+  <!-- THREE.JS loaded once as a global script (not module) so it's available everywhere -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --phi: 1.618;
+      --bg: #000000;
+      --surface: #080808;
+      --raised: #0f0f0f;
+      --glass: rgba(0, 0, 0, 0.72);
+      --border: rgba(255, 255, 255, 0.055);
+      --border-gold: rgba(90, 242, 181, 0.18);
+      --brand: #5AF2B5;
+      --brand-dim: rgba(90, 242, 181, 0.08);
+      --brand-glow: rgba(90, 242, 181, 0.18);
+      --bull: #0ecb81;
+      --bear: #f6465d;
+      --t1: #f0f2fc;
+      --t2: #b8bdd4;
+      --t3: #6e7896;
+      --t4: #2d3554;
+      --s1: 8px;
+      --s2: 13px;
+      --s3: 21px;
+      --s4: 34px;
+      --s5: 55px;
+      --s6: 89px;
+      --s7: 144px;
+      --fs-xs: 14px;
+      --fs-sm: 16px;
+      --fs-base: 18px;
+      --fs-md: 22px;
+      --fs-lg: 28px;
+      --fs-xl: 40px;
+      --fs-2xl: 60px;
+      --fs-3xl: 78px;
+      --fs-4xl: 104px;
+    }
+
+    @media (max-width: 1024px) {
+      :root {
+        --s4: 26px;
+        --s5: 42px;
+        --s6: 68px;
+        --s7: 110px;
+        --fs-xl: 32px;
+        --fs-2xl: 46px;
+        --fs-3xl: 58px;
+        --fs-4xl: 74px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      :root {
+        --s4: 20px;
+        --s5: 32px;
+        --s6: 48px;
+        --s7: 80px;
+        --fs-xs: 12px;
+        --fs-sm: 14px;
+        --fs-base: 16px;
+        --fs-lg: 22px;
+        --fs-xl: 28px;
+        --fs-2xl: 36px;
+        --fs-3xl: 42px;
+        --fs-4xl: 54px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      :root {
+        --s4: 16px;
+        --s5: 24px;
+        --s6: 28px;
+        --s7: 60px;
+        --fs-xs: 11px;
+        --fs-sm: 13px;
+        --fs-base: 15px;
+        --fs-lg: 19px;
+        --fs-xl: 22px;
+        --fs-2xl: 28px;
+        --fs-3xl: 34px;
+        --fs-4xl: 44px;
+      }
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body,
+    button,
+    input,
+    select,
+    textarea,
+    a,
+    p,
+    span,
+    div {
+      font-family: 'Montserrat', sans-serif !important;
+      font-weight: 400;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    .hero-title,
+    .bh-title,
+    .ft-logo,
+    .sec-title,
+    .logo,
+    .feature-name,
+    .mission-hdr,
+    .facc-num,
+    .facc-name,
+    .ticket-time,
+    .m-num,
+    .stat-val,
+    .op-price,
+    .live-pip,
+    .eyebrow,
+    .bot-hdr,
+    .tbar,
+    .m-lbl,
+    .hero-kicker,
+    .tick-item,
+    .stat-lbl {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-weight: 700 !important;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    h1.hero-title,
+    .bh-title,
+    .section-title {
+      font-weight: 800 !important;
+      letter-spacing: -0.02em;
+    }
+
+    html {
+      overflow: hidden;
+      height: 100%
+    }
+
+    body {
+      background: #000000;
+      color: var(--t1);
+      height: 100%;
+      overflow: hidden;
+      cursor: none;
+    }
+
+    .cyber-grid {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image: linear-gradient(rgba(90, 242, 181, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(90, 242, 181, 0.05) 1px, transparent 1px);
+      background-size: 50px 50px;
+      transform: perspective(600px) rotateX(60deg) translateY(-100px) scale(3);
+      transform-origin: center top;
+      opacity: 0.6;
+      pointer-events: none;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0) 70%);
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0) 70%);
+      animation: gridMove 10s linear infinite;
+    }
+
+    @keyframes gridMove {
+      0% {
+        background-position: 0 0;
+      }
+
+      100% {
+        background-position: 0 50px;
+      }
+    }
+
+    .cyber-scanlines {
+      position: fixed;
+      inset: 0;
+      z-index: 9995;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.15) 0px, rgba(0, 0, 0, 0.15) 1px, transparent 1px, transparent 2px);
+      mix-blend-mode: overlay;
+      opacity: 0.8;
+    }
+
+    .facc,
+    .metric-card,
+    .depth-ask,
+    .depth-bid,
+    .bot-card {
+      position: relative;
+    }
+
+    .facc::after,
+    .metric-card::after,
+    .bot-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border: 1px solid var(--brand-glow);
+      border-radius: inherit;
+      box-shadow: inset 0 0 15px rgba(90, 242, 181, 0.04);
+      pointer-events: none;
+      transition: box-shadow 0.3s, border-color 0.3s;
+    }
+
+    .facc:hover::after,
+    .bot-card:hover::after {
+      box-shadow: inset 0 0 30px rgba(90, 242, 181, 0.12), 0 0 20px rgba(90, 242, 181, 0.18);
+      border-color: rgba(90, 242, 181, 0.35);
+    }
+
+    ::-webkit-scrollbar {
+      display: none
+    }
+
+    #cur {
+      position: fixed;
+      width: 6px;
+      height: 6px;
+      background: var(--brand);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 11000;
+      transform: translate(-50%, -50%);
+      mix-blend-mode: screen;
+      transition: width .15s, height .15s, opacity .2s;
+    }
+
+    #cur-ring {
+      position: fixed;
+      width: 28px;
+      height: 28px;
+      border: 1px solid rgba(90, 242, 181, .5);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 10999;
+      transform: translate(-50%, -50%);
+      transition: width .28s, height .28s, border-color .2s, transform .28s;
+    }
+
+    @media (pointer: coarse) {
+
+      #cur,
+      #cur-ring {
+        display: none !important;
+      }
+
+      body {
+        cursor: auto !important;
+      }
+
+      button,
+      a {
+        cursor: pointer !important;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      #scroll-dots {
+        display: none;
+      }
+    }
+
+    #scroll-container {
+      height: 100vh;
+      overflow-y: auto;
+      scroll-behavior: initial;
+      overflow-x: hidden;
+      will-change: transform;
+    }
+
+    #scroll-container::-webkit-scrollbar {
+      display: none
+    }
+
+    .panel {
+      min-height: 100vh;
+      padding-top: 92px;
+      padding-bottom: 44px;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    @media (max-width: 768px) {
+      .panel {
+        padding-top: 60px;
+        padding-bottom: 60px;
+        height: auto;
+        min-height: auto;
+      }
+    }
+
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 800;
+      height: 55px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 var(--s6);
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(32px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-weight: 900 !important;
+      font-size: 24px;
+      letter-spacing: .20em;
+      text-transform: uppercase;
+      color: var(--t1);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+    }
+
+    .logo b {
+      color: var(--brand)
+    }
+
+    .nav-links {
+      display: flex;
+      gap: var(--s5);
+      list-style: none
+    }
+
+    .nav-links a {
+      font-size: var(--fs-xs);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--t3);
+      text-decoration: none;
+      transition: color .2s;
+      position: relative;
+    }
+
+    .nav-links a:hover {
+      color: var(--t1)
+    }
+
+    .nav-links a::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 0;
+      width: 0;
+      height: 1px;
+      background: var(--brand);
+      transition: width 0.35s cubic-bezier(.16, 1, .3, 1);
+    }
+
+    .nav-links a:hover::after {
+      width: 100%;
+    }
+
+    @media (max-width: 1024px) {
+      .nav-links {
+        display: none;
+      }
+
+      nav {
+        padding: 0 var(--s4);
+      }
+    }
+
+    #mobile-menu {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      padding: var(--s7) var(--s5);
+      gap: var(--s4);
+      transform: translateX(100%);
+      transition: transform 0.6s cubic-bezier(.16, 1, .3, 1);
+    }
+
+    #mobile-menu.open {
+      transform: translateX(0);
+    }
+
+    .m-link {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-size: var(--fs-lg);
+      text-transform: uppercase;
+      letter-spacing: .15em;
+      color: var(--t1);
+      text-decoration: none;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: var(--s3);
+      transition: color .3s;
+    }
+
+    .m-link:hover {
+      color: var(--brand);
+    }
+
+    .m-close {
+      position: absolute;
+      top: var(--s4);
+      right: var(--s4);
+      background: transparent;
+      border: none;
+      color: var(--t3);
+      cursor: pointer;
+    }
+
+    .hamburger {
+      display: none;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 5px;
+    }
+
+    @media (max-width: 1024px) {
+      .hamburger {
+        display: block;
+      }
+    }
+
+    .nav-right {
+      display: flex;
+      gap: var(--s2)
+    }
+
+    .nbtn {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      padding: 9px 20px;
+      border-radius: 3px;
+      cursor: none;
+      transition: all .2s;
+      text-transform: uppercase;
+      border: none;
+      perspective: 600px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .nbtn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--t3)
+    }
+
+    .nbtn-ghost:hover {
+      border-color: rgba(255, 255, 255, .2);
+      color: var(--t2)
+    }
+
+    .nbtn-brand {
+      background: var(--brand);
+      color: #0D0D0D;
+      font-weight: 700
+    }
+
+    .nbtn-brand:hover {
+      background: #7af7c8;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 30px rgba(90, 242, 181, .35)
+    }
+
+    .btn-flip-inner {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transform-origin: center center;
+      transform-style: preserve-3d;
+      will-change: transform;
+    }
+
+    .nbtn::after,
+    .hbtn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(90, 242, 181, 0.3) 50%, rgba(255, 255, 255, 0.18) 100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s;
+    }
+
+    .nbtn.btn-shimmer::after,
+    .hbtn.btn-shimmer::after {
+      opacity: 1;
+    }
+
+    .card-edge-top,
+    .card-edge-bottom,
+    .card-edge-left,
+    .card-edge-right {
+      position: absolute;
+      z-index: 10;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    .card-edge-top {
+      top: 0;
+      left: 8%;
+      right: 8%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--brand), rgba(255, 120, 50, 0.9), var(--brand), transparent);
+      border-radius: 2px;
+    }
+
+    .card-edge-bottom {
+      bottom: 0;
+      left: 8%;
+      right: 8%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--brand), rgba(255, 120, 50, 0.9), var(--brand), transparent);
+      border-radius: 2px;
+    }
+
+    .card-edge-left {
+      top: 8%;
+      bottom: 8%;
+      left: 0;
+      width: 2px;
+      background: linear-gradient(180deg, transparent, var(--brand), rgba(255, 120, 50, 0.9), var(--brand), transparent);
+      border-radius: 2px;
+    }
+
+    .card-edge-right {
+      top: 8%;
+      bottom: 8%;
+      right: 0;
+      width: 2px;
+      background: linear-gradient(180deg, transparent, var(--brand), rgba(255, 120, 50, 0.9), var(--brand), transparent);
+      border-radius: 2px;
+    }
+
+    .metric-card:hover .card-edge-top,
+    .metric-card:hover .card-edge-bottom,
+    .metric-card:hover .card-edge-left,
+    .metric-card:hover .card-edge-right,
+    .bot-card:hover .card-edge-top,
+    .bot-card:hover .card-edge-bottom,
+    .bot-card:hover .card-edge-left,
+    .bot-card:hover .card-edge-right,
+    .facc:hover .card-edge-top,
+    .facc:hover .card-edge-bottom,
+    .facc:hover .card-edge-left,
+    .facc:hover .card-edge-right,
+    .order-card:hover .card-edge-top,
+    .order-card:hover .card-edge-bottom,
+    .order-card:hover .card-edge-left,
+    .order-card:hover .card-edge-right {
+      opacity: 1;
+    }
+
+    .order-card.oc-red .card-edge-top,
+    .order-card.oc-red .card-edge-bottom {
+      background: linear-gradient(90deg, transparent, var(--bear), rgba(246, 70, 93, 0.9), var(--bear), transparent);
+    }
+
+    .order-card.oc-red .card-edge-left,
+    .order-card.oc-red .card-edge-right {
+      background: linear-gradient(180deg, transparent, var(--bear), rgba(246, 70, 93, 0.9), var(--bear), transparent);
+    }
+
+    #scroll-dots {
+      position: fixed;
+      right: var(--s4);
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 700;
+      display: flex;
+      flex-direction: column;
+      gap: var(--s2);
+    }
+
+    .sdot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--t4);
+      transition: background .3s, transform .3s, height .3s;
+      cursor: pointer;
+    }
+
+    .sdot.active {
+      background: var(--brand);
+      height: 18px;
+      border-radius: 2px
+    }
+
+    .ticker-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 800;
+      height: 24px;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+    }
+
+    @keyframes tickScroll {
+      from {
+        transform: translateX(0)
+      }
+
+      to {
+        transform: translateX(-50%)
+      }
+    }
+
+    .ticker-inner {
+      animation: tickScroll 60s linear infinite;
+      white-space: nowrap;
+      display: flex;
+      align-items: center
+    }
+
+    .ticker-inner:hover {
+      animation-play-state: paused
+    }
+
+    .tick-item {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--s1);
+      padding: 0 var(--s4);
+      border-right: 1px solid var(--border);
+      font-size: 13px;
+      letter-spacing: .05em;
+      font-weight: 500;
+    }
+
+    .tick-sym {
+      color: var(--t3)
+    }
+
+    .tick-px {
+      color: var(--t2);
+      font-weight: 600
+    }
+
+    .tick-up {
+      color: var(--bull)
+    }
+
+    .tick-dn {
+      color: var(--bear)
+    }
+
+    .eyebrow {
+      font-size: var(--fs-xs);
+      letter-spacing: .28em;
+      text-transform: uppercase;
+      color: var(--brand);
+      display: inline-flex;
+      align-items: center;
+      gap: var(--s3);
+      margin-bottom: var(--s3);
+    }
+
+    .eyebrow::before {
+      content: '';
+      width: var(--s4);
+      height: 1px;
+      background: var(--brand);
+      opacity: .45
+    }
+
+    #p-hero {
+      background: var(--bg)
+    }
+
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(90, 242, 181, .012) 1px, transparent 1px), linear-gradient(90deg, rgba(90, 242, 181, .012) 1px, transparent 1px);
+      background-size: 55px 55px;
+      mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black, transparent 78%);
+    }
+
+    .hero-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 55% at 50% 35%, rgba(90, 242, 181, .03), transparent 70%);
+    }
+
+    .hero-line {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: linear-gradient(to bottom, transparent, rgba(90, 242, 181, .05) 30%, rgba(90, 242, 181, .05) 70%, transparent);
+      transform: translateX(-50%);
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 var(--s6);
+      display: grid;
+      grid-template-columns: 1fr 0.618fr;
+      gap: var(--s6);
+      align-items: center;
+    }
+
+    @media (max-width: 1024px) {
+      .hero-inner {
+        grid-template-columns: 1fr;
+        gap: var(--s5);
+        text-align: center;
+        padding: 0 var(--s4);
+      }
+
+      .hero-sub {
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+      }
+
+      .hbtns {
+        justify-content: center;
+      }
+
+      .hero-stats {
+        justify-content: center;
+      }
+    }
+
+    .hero-kicker {
+      font-size: var(--fs-xs);
+      letter-spacing: .28em;
+      text-transform: uppercase;
+      color: var(--brand);
+      display: flex;
+      align-items: center;
+      gap: var(--s3);
+      margin-bottom: var(--s4);
+    }
+
+    .hero-kicker::before {
+      content: '';
+      width: var(--s3);
+      height: 1px;
+      background: var(--brand);
+      opacity: .5
+    }
+
+    h1.hero-title {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-size: clamp(38px, 8.5vw, 110px);
+      font-weight: 900;
+      line-height: .9;
+      letter-spacing: -.05em;
+      color: var(--t1);
+      margin-bottom: var(--s4);
+    }
+
+    h1.hero-title em,
+    h1.hero-title strong,
+    h1.hero-title span {
+      font-style: normal;
+      color: var(--brand);
+      display: block;
+      font-weight: 900;
+      letter-spacing: .02em;
+    }
+
+    h1.hero-title strong {
+      font-size: .42em;
+      letter-spacing: .05em;
+      margin-top: var(--s2);
+      line-height: 1.15;
+      text-transform: uppercase;
+    }
+
+    .hero-sub {
+      font-weight: 400;
+      font-size: clamp(14px, 1.3vw, 18px);
+      line-height: 1.85;
+      color: var(--t3);
+      max-width: 420px;
+      margin-bottom: var(--s5);
+    }
+
+    .live-pip {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--s1);
+      font-size: 10px;
+      letter-spacing: .16em;
+      color: var(--t3);
+      background: rgba(14, 203, 129, .06);
+      border: 1px solid rgba(14, 203, 129, .15);
+      padding: 5px 12px;
+      border-radius: 100px;
+      margin-bottom: var(--s4);
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .12
+      }
+    }
+
+    .ldot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--bull);
+      animation: blink 1.8s infinite;
+      flex-shrink: 0
+    }
+
+    .ldot.amb {
+      background: var(--brand)
+    }
+
+    .hbtns {
+      display: flex;
+      gap: var(--s2);
+      flex-wrap: wrap
+    }
+
+    .hbtn {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 14px 24px;
+      border-radius: 3px;
+      cursor: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all .25s;
+      border: none;
+      position: relative;
+      overflow: hidden;
+      perspective: 600px;
+    }
+
+    .hbtn.pri {
+      background: var(--brand);
+      color: #0D0D0D
+    }
+
+    .hbtn.pri:hover {
+      background: #7af7c8;
+      transform: translateY(-2px);
+      box-shadow: 0 16px 48px rgba(90, 242, 181, .35)
+    }
+
+    .hbtn.sec {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--t2)
+    }
+
+    .hbtn.sec:hover {
+      border-color: rgba(255, 255, 255, .2);
+      color: var(--t1)
+    }
+
+    .hbtn.out {
+      background: transparent;
+      border: 1px solid var(--border-gold);
+      color: var(--brand)
+    }
+
+    .hbtn.out:hover {
+      background: var(--brand-dim);
+      border-color: rgba(90, 242, 181, .45)
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: var(--s5);
+      margin-top: var(--s5);
+      padding-top: var(--s4);
+      border-top: 1px solid var(--border);
+    }
+
+    .stat-val {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-size: var(--fs-xl);
+      font-weight: 800;
+      color: var(--t1);
+      line-height: 1;
+    }
+
+    .stat-val.up {
+      color: var(--bull)
+    }
+
+    .stat-val.br {
+      color: var(--brand)
+    }
+
+    .stat-lbl {
+      font-size: 11px;
+      letter-spacing: .14em;
+      color: var(--t3);
+      margin-top: 6px;
+      text-transform: uppercase;
+      font-weight: 500
+    }
+
+    .terminal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 60px 160px rgba(0, 0, 0, .85), 0 0 80px rgba(255, 69, 0, .04);
+    }
+
+    .tbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px var(--s3);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .mdot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%
+    }
+
+    .ttitle {
+      font-size: 8px;
+      color: var(--t3);
+      letter-spacing: .12em;
+      margin: 0 auto
+    }
+
+    .ob-row {
+      display: flex;
+      align-items: center;
+      padding: 3px var(--s2);
+      position: relative
+    }
+
+    .ob-bar {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0
+    }
+
+    .ob-px {
+      font-size: 9px;
+      width: 58px;
+      z-index: 1;
+      position: relative
+    }
+
+    .ob-sz {
+      font-size: 9px;
+      color: var(--t3);
+      margin-left: auto;
+      z-index: 1;
+      position: relative
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(52px) scale(.98);
+        filter: blur(4px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0)
+      }
+    }
+
+    @keyframes iconRoll {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .roll-active {
+      animation: iconRoll 0.6s cubic-bezier(.16, 1, .3, 1);
+    }
+
+    @keyframes slideFromLeft {
+      from {
+        opacity: 0;
+        transform: translateX(-100px);
+        filter: blur(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+        filter: blur(0);
+      }
+    }
+
+    @keyframes slideFromRight {
+      from {
+        opacity: 0;
+        transform: translateX(100px);
+        filter: blur(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+        filter: blur(0);
+      }
+    }
+
+    .panel.visible .slide-l {
+      animation: slideFromLeft 0.8s cubic-bezier(.16, 1, .3, 1) forwards;
+    }
+
+    .panel.visible .slide-r {
+      animation: slideFromRight 0.8s cubic-bezier(.16, 1, .3, 1) forwards;
+    }
+
+    .slide-l,
+    .slide-r {
+      opacity: 0;
+    }
+
+    .panel-content {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+
+    .panel.visible .panel-content {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0)
+    }
+
+    .panel-content.d1 {
+      transition-delay: .1s
+    }
+
+    .panel-content.d2 {
+      transition-delay: .25s
+    }
+
+    .panel-content.d3 {
+      transition-delay: .42s
+    }
+
+    .panel-content.d4 {
+      transition-delay: .58s
+    }
+
+    #p-features {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border)
+    }
+
+    .features-inner {
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 var(--s6)
+    }
+
+    .features-header {
+      margin-bottom: var(--s4)
+    }
+
+    .section-title {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-size: clamp(34px, 3.5vw, 62px);
+      font-weight: 800;
+      line-height: .95;
+      letter-spacing: -0.01em;
+      color: var(--t1);
+      overflow-wrap: break-word; /* Ensure text wraps */
+      word-wrap: break-word;
+    }
+
+    @media (max-width: 768px) {
+      .section-title {
+        text-align: center;
+        width: 100%;
+        margin-left: auto;
+        margin-right: auto;
+        font-size: clamp(28px, 6vw, 42px); /* Scale down text to prevent horizontal overflow */
+      }
+
+      .section-sub {
+        text-align: center;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .eyebrow {
+        justify-content: center !important;
+        width: 100%;
+      }
+
+      .op-reveal {
+        text-align: center !important;
+      }
+
+      .depth-legend {
+        justify-content: center !important;
+      }
+    }
+
+    .section-title em,
+    .section-title span {
+      font-style: normal;
+      color: var(--brand);
+      display: inline;
+    }
+
+    .section-title strong {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-weight: 900;
+      font-size: .85em;
+      letter-spacing: .02em;
+      color: var(--t2);
+    }
+
+    .section-sub {
+      font-size: clamp(14px, 1.2vw, 17px);
+      line-height: 1.95;
+      color: var(--t3);
+      max-width: 480px;
+      margin-top: var(--s3);
+    }
+
+    .feat-row {
+      display: flex;
+      gap: var(--s5);
+      width: 100%;
+      overflow-x: auto;
+      padding: var(--s4) var(--s4) var(--s5) var(--s4);
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      scroll-behavior: smooth;
+      mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+    }
+
+    .feat-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .facc {
+      flex: 0 0 min(340px, 85vw);
+      min-width: min(340px, 85vw);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: var(--s6) var(--s5);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      cursor: grab;
+      transition: transform 0.3s, background 0.4s;
+    }
+
+    .facc:active {
+      cursor: grabbing;
+    }
+
+    .facc:nth-child(1) {
+      background: linear-gradient(135deg, rgba(14, 203, 129, 0.08) 0%, var(--surface) 100%);
+    }
+
+    .facc:nth-child(2) {
+      background: linear-gradient(135deg, rgba(14, 203, 129, 0.06) 0%, var(--surface) 100%);
+    }
+
+    .facc:nth-child(3) {
+      background: linear-gradient(135deg, rgba(0, 163, 255, 0.08) 0%, var(--surface) 100%);
+    }
+
+    .facc:nth-child(4) {
+      background: linear-gradient(135deg, rgba(167, 82, 255, 0.08) 0%, var(--surface) 100%);
+    }
+
+    .facc:nth-child(5) {
+      background: linear-gradient(135deg, rgba(246, 70, 93, 0.08) 0%, var(--surface) 100%);
+    }
+
+    .facc:hover {
+      transform: translateY(-8px);
+    }
+
+    .feat-progress-container {
+      width: 120px;
+      height: 3px;
+      background: var(--border);
+      margin: 0 auto;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .feat-progress-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: var(--brand);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .facc-num {
+      font-size: 12px;
+      color: var(--t3);
+      letter-spacing: .2em;
+      margin-bottom: var(--s3);
+      white-space: nowrap;
+      font-weight: 500
+    }
+
+    .facc-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      background: var(--brand-dim);
+      border: 1px solid rgba(255, 69, 0, .12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--s3);
+      color: var(--brand);
+      flex-shrink: 0
+    }
+
+    .facc-name {
+      font-size: clamp(12px, 1.05vw, 14px);
+      letter-spacing: .06em;
+      color: var(--t2);
+      font-weight: 600;
+      margin-bottom: var(--s2);
+      line-height: 1.45;
+      transition: color .3s;
+    }
+
+    .facc:hover .facc-name {
+      color: var(--t1)
+    }
+
+    .facc-desc {
+      font-size: clamp(12px, 0.85vw, 14px);
+      line-height: 1.6;
+      color: var(--t3);
+      margin-top: var(--s2);
+      margin-bottom: var(--s4);
+    }
+
+    .facc-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: auto;
+      padding-top: var(--s2)
+    }
+
+    .tag {
+      font-size: 7.5px;
+      letter-spacing: .14em;
+      padding: 3px 8px;
+      border-radius: 2px;
+      background: var(--brand-dim);
+      border: 1px solid rgba(255, 69, 0, .1);
+      color: var(--brand);
+      white-space: nowrap
+    }
+
+    .facc-inner {
+      height: 100%;
+      display: flex;
+      flex-direction: column
+    }
+
+    .facc-accent {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--brand), transparent);
+      opacity: 0;
+      transition: opacity .35s
+    }
+
+    .facc:hover .facc-accent {
+      opacity: .5
+    }
+
+    #p-performance {
+      background: var(--bg)
+    }
+
+    .perf-inner,
+    .bots-inner,
+    .depth-inner {
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 var(--s6);
+      display: grid;
+      grid-template-columns: 0.618fr 1fr;
+      gap: var(--s7);
+      align-items: center;
+    }
+
+    @media (max-width: 1024px) {
+
+      .perf-inner,
+      .bots-inner,
+      .depth-inner {
+        grid-template-columns: 1fr;
+        gap: var(--s5);
+        padding: 0 var(--s4);
+        text-align: center;
+      }
+
+      .metrics-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .bots-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .metrics-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--s3)
+    }
+
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: var(--s4) var(--s4);
+      position: relative;
+      overflow: hidden;
+      transition: border-color .4s, transform .4s, box-shadow .4s;
+    }
+
+    .metric-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: var(--s4);
+      right: var(--s4);
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--brand), transparent);
+      opacity: .35;
+    }
+
+    .metric-card:hover {
+      border-color: rgba(255, 69, 0, 0.6);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 69, 0, 0.05);
+    }
+
+    .metric-num {
+      font-size: clamp(34px, 3.2vw, 52px);
+      font-weight: 800;
+      font-style: normal;
+      color: var(--t1);
+      line-height: .9;
+    }
+
+    .metric-unit {
+      font-size: var(--fs-base);
+      color: var(--brand);
+      margin-left: 2px
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      margin: var(--s2) 0 var(--s1);
+      color: var(--t2)
+    }
+
+    .metric-desc {
+      font-weight: 400;
+      font-size: 15px;
+      line-height: 1.8;
+      color: var(--t3)
+    }
+
+    #p-bots {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border)
+    }
+
+    .bots-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--s3)
+    }
+
+    .bot-card {
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color .4s, transform .4s, box-shadow .4s;
+      position: relative;
+    }
+
+    .bot-card::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 69, 0, 0.18) 0%, rgba(255, 69, 0, 0.06) 40%, transparent 70%);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s cubic-bezier(.16, 1, .3, 1), height 0.6s cubic-bezier(.16, 1, .3, 1), opacity 0.55s;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .bot-card:hover::before {
+      width: 500px;
+      height: 500px;
+      opacity: 1;
+    }
+
+    .bot-card:hover {
+      border-color: rgba(255, 69, 0, 0.6);
+      transform: perspective(1000px) rotateX(2deg) rotateY(1deg) translateY(-6px) scale(1.01);
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 35px rgba(255, 69, 0, 0.08);
+    }
+
+    .bot-hdr {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      padding: var(--s3) var(--s4);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border)
+    }
+
+    .bot-name {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      color: var(--t2)
+    }
+
+    .bot-badge {
+      margin-left: auto;
+      font-size: 10px;
+      letter-spacing: .14em;
+      padding: 2px 8px;
+      border-radius: 100px;
+      background: rgba(14, 203, 129, .07);
+      border: 1px solid rgba(14, 203, 129, .18);
+      color: var(--bull)
+    }
+
+    .bot-body {
+      padding: var(--s3)
+    }
+
+    .bot-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--s3);
+      margin-bottom: var(--s3)
+    }
+
+    .bot-sl {
+      font-size: 11px;
+      color: var(--t3);
+      margin-bottom: 3px;
+      letter-spacing: .08em
+    }
+
+    .bot-sv {
+      font-size: var(--fs-xl);
+      font-weight: 800;
+      color: var(--t1)
+    }
+
+    .bot-sv.bull {
+      color: var(--bull)
+    }
+
+    .bot-sv.br {
+      color: var(--brand)
+    }
+
+    .feed-lbl {
+      font-size: 10.5px;
+      letter-spacing: .2em;
+      color: var(--t3);
+      text-transform: uppercase;
+      margin-bottom: var(--s2)
+    }
+
+    .trade-row {
+      display: flex;
+      align-items: center;
+      gap: var(--s1);
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px
+    }
+
+    .trade-row:last-child {
+      border: none
+    }
+
+    .tside {
+      padding: 2px 6px;
+      border-radius: 2px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em
+    }
+
+    .tside.buy {
+      background: rgba(14, 203, 129, .09);
+      color: var(--bull)
+    }
+
+    .tside.sell {
+      background: rgba(246, 70, 93, .09);
+      color: var(--bear)
+    }
+
+    .tpx {
+      color: var(--t2);
+      flex: 1
+    }
+
+    .tqty {
+      color: var(--t3)
+    }
+
+    .ttime {
+      color: var(--t4);
+      margin-left: auto
+    }
+
+    #p-depth {
+      background: var(--bg)
+    }
+
+    .depth-inner {
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 var(--s6);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--s7);
+      align-items: center
+    }
+
+    .hero-inner > div,
+    .perf-inner > div,
+    .bots-inner > div,
+    .depth-inner > div {
+      min-width: 0;
+    }
+
+    .depth-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden
+    }
+
+    .depth-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--s2) var(--s4);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--t3);
+      letter-spacing: .1em
+    }
+
+    #p-cta {
+      background: var(--bg)
+    }
+
+    .cta-inner {
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 var(--s6);
+      text-align: center;
+      position: relative;
+      z-index: 1
+    }
+
+    .cta-glow {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 50% 60% at 50% 50%, rgba(255, 69, 0, .05), transparent);
+      pointer-events: none
+    }
+
+    .cta-title {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-size: clamp(48px, 6.5vw, var(--fs-3xl));
+      font-weight: 800;
+      line-height: .9;
+      color: var(--t1);
+      margin-bottom: var(--s4);
+      text-transform: uppercase;
+    }
+
+    .cta-sub {
+      font-size: clamp(12px, 1.1vw, 15px);
+      line-height: 1.9;
+      color: var(--t3);
+      max-width: 360px;
+      margin: 0 auto var(--s5)
+    }
+
+    .cta-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(70vw, 700px);
+      height: min(70vw, 700px);
+      border-radius: 50%;
+      border: 1px solid rgba(255, 69, 0, .04);
+      animation: ringPulse 4s ease-in-out infinite;
+    }
+
+    .cta-ring2 {
+      animation-delay: .8s;
+      width: min(55vw, 550px);
+      height: min(55vw, 550px)
+    }
+
+    .cta-ring3 {
+      animation-delay: 1.6s;
+      width: min(40vw, 400px);
+      height: min(40vw, 400px)
+    }
+
+    @keyframes ringPulse {
+
+      0%,
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: .5
+      }
+
+      50% {
+        transform: translate(-50%, -50%) scale(1.04);
+        opacity: .2
+      }
+    }
+
+    #p-footer {
+      background: var(--surface);
+      height: auto;
+      min-height: 100vh
+    }
+
+    footer {
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: var(--s7) var(--s6) var(--s5)
+    }
+
+    .ft-grid {
+      display: grid;
+      grid-template-columns: 1.618fr 1fr 1fr 1fr;
+      gap: var(--s6);
+      padding-bottom: var(--s5);
+      border-bottom: 1px solid var(--border)
+    }
+
+    .ft-logo {
+      font-size: var(--fs-sm);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--t2);
+      margin-bottom: var(--s3);
+      display: flex;
+      align-items: center;
+      gap: var(--s1)
+    }
+
+    .ft-logo b {
+      color: var(--brand)
+    }
+
+    .ft-about {
+      font-size: 11px;
+      line-height: 1.9;
+      color: var(--t3);
+      max-width: 200px
+    }
+
+    .ft-col-title {
+      font-size: 7.5px;
+      letter-spacing: .24em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: var(--s4)
+    }
+
+    .ft-links {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: var(--s2)
+    }
+
+    .ft-links a {
+      font-size: 11.5px;
+      color: var(--t4);
+      text-decoration: none;
+      transition: color .2s
+    }
+
+    .ft-links a:hover {
+      color: var(--t2)
+    }
+
+    .ft-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: var(--s4);
+      font-size: 8px;
+      color: var(--t4)
+    }
+
+    .ft-bottom a {
+      color: var(--t4);
+      text-decoration: none;
+      transition: color .2s
+    }
+
+    .ft-bottom a:hover {
+      color: var(--t3)
+    }
+
+    @media (max-width: 768px) {
+      .cta-inner {
+        text-align: center;
+      }
+
+      .cta-sub {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .ft-grid {
+        grid-template-columns: 1fr !important;
+        gap: var(--s5) !important;
+        text-align: center;
+      }
+
+      .ft-logo {
+        justify-content: center;
+        width: 100%;
+        text-align: center;
+      }
+
+      .ft-bottom {
+        flex-direction: column;
+        gap: var(--s3);
+        text-align: center;
+      }
+
+      .section-sub {
+        font-size: 14px;
+        max-width: 100%;
+        line-height: 1.8;
+      }
+    }
+
+    .trust-wrap {
+      overflow: hidden;
+      padding: var(--s5) 0 var(--s6) 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+      position: relative;
+    }
+
+    .trust-title {
+      font-size: var(--fs-md);
+      font-weight: 800;
+      letter-spacing: .05em;
+      color: var(--t1);
+      margin-bottom: var(--s2);
+      text-transform: uppercase;
+    }
+
+    .trust-title span {
+      color: var(--brand);
+    }
+
+    .trust-sub {
+      font-size: 14px;
+      color: var(--t3);
+      margin-bottom: var(--s5);
+    }
+
+    .stock-mq-wrap {
+      display: flex;
+      width: 100%;
+      overflow: hidden;
+      white-space: nowrap;
+      position: relative;
+      padding: var(--s4) 0;
+      margin: calc(var(--s4) * -1) 0;
+    }
+
+    .stock-mq-wrap::before,
+    .stock-mq-wrap::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 180px;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .stock-mq-wrap::before {
+      left: 0;
+      background: linear-gradient(to right, var(--bg), transparent);
+    }
+
+    .stock-mq-wrap::after {
+      right: 0;
+      background: linear-gradient(to left, var(--bg), transparent);
+    }
+
+    @keyframes stockMarquee {
+      from {
+        transform: translateX(0);
+      }
+
+      to {
+        transform: translateX(-50%);
+      }
+    }
+
+    .stock-mq-track {
+      display: flex;
+      gap: var(--s4);
+      animation: stockMarquee 35s linear infinite;
+      padding-left: var(--s4);
+      width: max-content;
+    }
+
+    .stock-mq-track:hover {
+      animation-play-state: paused;
+    }
+
+    .scard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      min-width: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      cursor: none;
+      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scard::before {
+      content: '';
+      position: absolute;
+      top: var(--my, 50%);
+      left: var(--mx, 50%);
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 69, 0, 0.22) 0%, rgba(255, 69, 0, 0.08) 40%, transparent 70%);
+      transform: translate(-50%, -50%);
+      transition: width 0.55s cubic-bezier(.16, 1, .3, 1), height 0.55s cubic-bezier(.16, 1, .3, 1), opacity 0.55s;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .scard:hover::before {
+      width: 300px;
+      height: 300px;
+      opacity: 1;
+    }
+
+    .scard:hover {
+      transform: translate(5px, -3px);
+      border-color: rgba(255, 69, 0, 0.6);
+      box-shadow: 10px 10px 30px rgba(0, 0, 0, 0.6), 0 0 25px rgba(255, 69, 0, 0.15);
+      z-index: 10;
+    }
+
+    .sc-edge-t {
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 69, 0, .6), transparent);
+      transform: translateX(-100%);
+      transition: transform 0.6s;
+      position: absolute;
+    }
+
+    .sc-edge-b {
+      bottom: 0;
+      right: 0;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(-90deg, transparent, rgba(255, 69, 0, .6), transparent);
+      transform: translateX(100%);
+      transition: transform 0.6s;
+      position: absolute;
+    }
+
+    .sc-edge-l {
+      bottom: 0;
+      left: 0;
+      width: 1px;
+      height: 100%;
+      background: linear-gradient(0deg, transparent, rgba(255, 69, 0, .6), transparent);
+      transform: translateY(100%);
+      transition: transform 0.6s;
+      position: absolute;
+    }
+
+    .sc-edge-r {
+      top: 0;
+      right: 0;
+      width: 1px;
+      height: 100%;
+      background: linear-gradient(180deg, transparent, rgba(255, 69, 0, .6), transparent);
+      transform: translateY(-100%);
+      transition: transform 0.6s;
+      position: absolute;
+    }
+
+    .scard:hover .sc-edge-t {
+      transform: translateX(100%);
+    }
+
+    .scard:hover .sc-edge-b {
+      transform: translateX(-100%);
+    }
+
+    .scard:hover .sc-edge-l {
+      transform: translateY(-100%);
+    }
+
+    .scard:hover .sc-edge-r {
+      transform: translateY(100%);
+    }
+
+    .sc-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sc-sym {
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--t1);
+    }
+
+    .sc-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      background: var(--brand-dim);
+      border: 1px solid rgba(255, 69, 0, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--brand);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .sc-price-row {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
+
+    .sc-price {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--t1);
+    }
+
+    .sc-chg {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sc-chg.up {
+      color: var(--bull);
+    }
+
+    .sc-chg.dn {
+      color: var(--bear);
+    }
+
+    .order-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: var(--s5);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+      overflow: hidden;
+      cursor: none;
+      transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s;
+      z-index: 1;
+    }
+
+    .order-card>* {
+      position: relative;
+      z-index: 2;
+    }
+
+    .order-card::before {
+      content: '';
+      position: absolute;
+      top: var(--my, 50%);
+      left: var(--mx, 50%);
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 69, 0, 0.15) 0%, rgba(255, 69, 0, 0.05) 40%, transparent 70%);
+      transform: translate(-50%, -50%);
+      transition: width 0.55s cubic-bezier(.16, 1, .3, 1), height 0.55s cubic-bezier(.16, 1, .3, 1), opacity 0.55s;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .order-card:hover::before {
+      width: 400px;
+      height: 400px;
+      opacity: 1;
+    }
+
+    .order-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 69, 0, 0.4), transparent);
+      opacity: 0;
+      transition: opacity 0.4s;
+      z-index: 1;
+    }
+
+    .order-card:hover::after {
+      opacity: 1;
+    }
+
+    .order-card:hover {
+      border-color: rgba(255, 69, 0, 0.6);
+      transform: translate(8px, -4px);
+      box-shadow: 15px 15px 40px rgba(0, 0, 0, 0.7), 0 0 50px rgba(255, 69, 0, 0.15);
+      z-index: 10;
+    }
+
+    .order-card.oc-red:hover {
+      border-color: rgba(246, 70, 93, 0.6);
+      transform: translate(8px, -4px);
+      box-shadow: 15px 15px 40px rgba(0, 0, 0, 0.7), 0 0 50px rgba(246, 70, 93, 0.15);
+    }
+
+    .order-card.oc-red::before {
+      background: radial-gradient(circle, rgba(246, 70, 93, 0.15) 0%, rgba(246, 70, 93, 0.05) 40%, transparent 70%);
+    }
+
+    .order-card.oc-red::after {
+      background: linear-gradient(90deg, transparent, rgba(246, 70, 93, 0.4), transparent);
+    }
+
+    .oc-type {
+      font-weight: 800;
+      font-size: var(--fs-md);
+      color: var(--t1);
+      letter-spacing: .02em;
+    }
+
+    .oc-desc {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--t3);
+      flex: 1;
+    }
+
+    .oc-tags {
+      display: flex;
+      gap: 6px;
+      margin-top: auto;
+    }
+
+    .desktop-only {
+      display: block;
+    }
+
+    .orders-inner {
+      width: 100%;
+      max-width: 1400px;
+      padding: var(--s7) var(--s6);
+      margin: 0 auto;
+      position: relative;
+    }
+
+    @media (max-width: 1024px) {
+      .orders-inner {
+        padding: var(--s4) var(--s4);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .desktop-only {
+        display: none !important;
+      }
+    }
+
+    .mobile-only {
+      display: none !important;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-only {
+        display: block !important;
+      }
+    }
+
+    .bh-sticky {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #bh-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      width: 100%;
+      height: 100%;
+    }
+
+    .bh-content {
+      position: relative;
+      z-index: 20;
+      text-align: center;
+      width: 100%;
+      max-width: 1000px;
+      margin: 0 auto;
+      pointer-events: none;
+    }
+
+    .bh-sub {
+      font-size: 14px;
+      color: var(--brand);
+      text-transform: uppercase;
+      letter-spacing: 0.8em;
+      margin-bottom: 24px;
+    }
+
+    .bh-title {
+      font-family: 'Barlow Semi Condensed', sans-serif !important;
+      font-size: clamp(3rem, 10vw, 7.5rem);
+      line-height: 0.85;
+      margin-bottom: 32px;
+      color: #fff;
+    }
+
+    .bh-desc-mobile {
+      display: none;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--t3);
+      max-width: 400px;
+      margin: 0 auto 32px;
+    }
+
+    .bh-cta {
+      display: inline-block;
+      padding: 16px 40px;
+      background: var(--brand);
+      color: #000;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      border-radius: 4px;
+      text-decoration: none;
+      pointer-events: auto;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .bh-cta:hover {
+      background: #fff;
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(255, 255, 255, 0.2);
+    }
+
+    @media (max-width: 768px) {
+      #p-blackhole {
+        height: auto !important;
+        min-height: auto !important;
+        padding: var(--s6) 0;
+      }
+
+      .bh-sticky {
+        position: relative !important;
+        height: auto !important;
+      }
+
+      #bh-canvas {
+        display: none !important;
+      }
+
+      .bh-content {
+        opacity: 1 !important;
+        transform: none !important;
+        padding: 0 24px !important;
+        pointer-events: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        width: 100% !important;
+        max-width: none !important;
+      }
+
+      .bh-sub {
+        letter-spacing: 0.4em !important;
+        margin-bottom: 16px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+      }
+
+      .bh-title {
+        font-size: clamp(28px, 8vw, 42px) !important;
+        line-height: .9 !important;
+        margin-bottom: 24px !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        gap: 12px !important;
+        justify-content: center !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        white-space: normal !important;
+      }
+
+      .bh-desc-mobile {
+        display: block !important;
+        text-align: center !important;
+        opacity: 0.8;
+      }
+
+      .bh-cta,
+      .desktop-only-bh {
+        display: none !important;
+      }
+
+      .nav-right .nbtn-brand {
+        display: none !important;
+      }
+    }
+
+    .fmt-hide {
+      opacity: 0;
+      will-change: transform, opacity;
+    }
+
+    .fmt-hide-fast {
+      opacity: 0;
+      transform: scale(0.95);
+      will-change: transform, opacity;
+    }
+
+    #app-view {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+      filter: blur(0);
+      width: 100%;
+      height: 100%;
+    }
+
+    #app-view.cinematic-reveal {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+      filter: blur(0);
+    }
+
+    #screen-flash {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: radial-gradient(ellipse at center, rgba(90, 242, 181, 0.95), rgba(255, 255, 255, 0.85));
+      opacity: 0;
+      pointer-events: none;
+      will-change: opacity;
+    }
+
+    #screen-flash.flash {
+      animation: screenFlash 1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes screenFlash {
+      0% {
+        opacity: 0
+      }
+
+      8% {
+        opacity: 0.95
+      }
+
+      100% {
+        opacity: 0
+      }
+    }
+
+    #grain {
+      position: fixed;
+      inset: -200%;
+      z-index: 9996;
+      pointer-events: none;
+      opacity: 0.042;
+      background-image: url("https://upload.wikimedia.org/wikipedia/commons/7/76/1k_pnt_noise.png");
+      background-repeat: repeat;
+      background-size: 256px 256px;
+      animation: grainMove 0.8s steps(6) infinite;
+      will-change: transform;
+    }
+
+    @keyframes grainMove {
+
+      0%,
+      100% {
+        transform: translate(0, 0)
+      }
+
+      10% {
+        transform: translate(-5%, -10%)
+      }
+
+      20% {
+        transform: translate(-15%, 5%)
+      }
+
+      30% {
+        transform: translate(7%, -25%)
+      }
+
+      40% {
+        transform: translate(-5%, 25%)
+      }
+
+      50% {
+        transform: translate(-15%, 10%)
+      }
+
+      60% {
+        transform: translate(15%, 0)
+      }
+
+      70% {
+        transform: translate(0, 15%)
+      }
+
+      80% {
+        transform: translate(3%, 35%)
+      }
+
+      90% {
+        transform: translate(-10%, 10%)
+      }
+    }
+
+    @media(max-width:1024px) {
+
+      .hero-inner,
+      .perf-inner,
+      .bots-inner,
+      .depth-inner {
+        grid-template-columns: 1fr;
+        gap: var(--s5)
+      }
+
+      .metrics-grid {
+        grid-template-columns: 1fr 1fr
+      }
+
+      .bots-grid {
+        grid-template-columns: 1fr
+      }
+
+      .ft-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: var(--s4)
+      }
+
+      nav {
+        padding: 0 var(--s4)
+      }
+
+      .features-inner,
+      .perf-inner,
+      .bots-inner,
+      .depth-inner,
+      footer {
+        padding: 0 var(--s4)
+      }
+    }
+
+    #depth-canvas {
+      width: 100%;
+      height: 240px;
+      max-height: 320px;
+      display: block;
+    }
+
+    @media(max-width:768px) {
+      .metrics-grid {
+        grid-template-columns: 1fr
+      }
+
+      .facc-desc {
+        opacity: 1;
+        max-height: none
+      }
+
+      .hero-stats {
+        gap: var(--s4);
+        flex-wrap: wrap
+      }
+
+      .ft-grid {
+        grid-template-columns: 1fr
+      }
+
+      #scroll-dots {
+        display: none
+      }
+
+      #depth-canvas {
+        height: 180px !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .panel {
+        padding-top: 70px;
+        padding-bottom: 30px;
+      }
+
+      .hero-title {
+        font-size: clamp(38px, 12vw, 60px) !important;
+      }
+
+      .hero-sub {
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: var(--s4);
+      }
+
+      .hbtns {
+        flex-direction: column;
+        gap: var(--s2);
+      }
+
+      .hbtn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .hero-stats {
+        gap: var(--s3);
+        margin-top: var(--s4);
+        padding-top: var(--s3);
+      }
+
+      .stat-val {
+        font-size: calc(var(--fs-xl) * 0.9);
+      }
+
+      .ft-bottom {
+        flex-direction: column;
+        gap: var(--s3);
+        text-align: center;
+      }
+
+      footer {
+        padding: var(--s6) var(--s4) var(--s5);
+      }
+
+      .section-title {
+        font-size: clamp(28px, 10vw, 42px);
+      }
+
+      .metric-num {
+        font-size: 32px;
+      }
+
+      .facc {
+        padding: var(--s5) var(--s4);
+      }
+    }
+
+    canvas {
+      display: block
+    }
+
+    .terminal-grid-top,
+    .terminal-grid-bottom {
+      display: grid;
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .terminal-grid-top > div,
+    .terminal-grid-bottom > div {
+      min-width: 0;
+    }
+
+    .terminal-grid-top {
+      grid-template-columns: 1fr 115px;
+    }
+
+    .terminal-grid-bottom {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    @media (max-width: 480px) {
+
+      .terminal-grid-top,
+      .terminal-grid-bottom {
+        grid-template-columns: 1fr;
+      }
+
+      .terminal-grid-top>div:last-of-type {
+        border-top: 1px solid var(--border);
+        max-height: 200px;
+        overflow-y: auto;
+      }
+
+      .terminal-grid-bottom>div:last-of-type {
+        border-top: 1px solid var(--border);
+      }
+
+      .ob-px {
+        font-size: 10px;
+        width: 70px;
+      }
+
+      .sc-price {
+        font-size: 18px;
+      }
+
+      .scard {
+        min-width: 140px;
+        padding: 12px;
+      }
+
+      .stock-mq-track {
+        gap: 12px;
+      }
+    }
+
+    .stellar-wrap {
+      position: relative;
+      height: 250vh;
+      background: #000;
+      overflow: clip;
+    }
+
+    .hbtn.out.btn-login {
+      padding: 0 24px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--t1);
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 14px;
+      cursor: pointer;
+      letter-spacing: 0.1em;
+    }
+    .hbtn.out.btn-login:hover {
+      border-color: rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="cyber-grid"></div>
+  <div class="cyber-scanlines"></div>
+  <div id="screen-flash"></div>
+  <div id="grain"></div>
+  <div id="cur"></div>
+  <div id="cur-ring"></div>
+
+  <div id="app-view">
+
+    <nav>
+      <a href="/" class="logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#5AF2B5">
+          <polygon points="12,2 22,22 2,22" />
+        </svg>
+        Synthetic<b>Bull</b>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#" id="nav-0">Home</a></li>
+        <li><a href="#" id="nav-1">Features</a></li>
+        <li><a href="#" id="nav-2">Performance</a></li>
+        <li><a href="#" id="nav-3">Live Bots</a></li>
+        <li><a href="#" id="nav-4">Depth</a></li>
+      </ul>
+      <div class="nav-right">
+        <button class="nbtn nbtn-ghost btn-login" style="margin-right: 8px;"><span class="btn-text">Login</span></button>
+        <button class="nbtn nbtn-brand btn-signup"><span class="btn-text">Sign Up</span></button>
+        <button class="hamburger" id="hamburger-btn">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b8bdd4" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </nav>
+
+    <div id="mobile-menu">
+      <button class="m-close" id="menu-close">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+      <a href="#" class="m-link" data-panel="0">Home</a>
+      <a href="#" class="m-link" data-panel="1">Features</a>
+      <a href="#" class="m-link" data-panel="2">Performance</a>
+      <a href="#" class="m-link" data-panel="3">Live Bots</a>
+      <a href="#" class="m-link" data-panel="4">Depth</a>
+      <a href="/terminal" class="m-link btn-login" style="color:var(--t1);font-weight:700">Login</a>
+      <div style="margin-top:auto; display:flex; gap:var(--s3)">
+        <button class="nbtn nbtn-brand btn-signup" style="flex:1"><span class="btn-text">Sign Up</span></button>
+      </div>
+    </div>
+
+    <div id="scroll-dots"></div>
+
+
+    <div id="scroll-container">
+
+      <!-- PANEL 1: HERO -->
+      <div class="panel" id="p-hero" data-index="0">
+        <div class="hero-grid"></div>
+        <div class="hero-vignette"></div>
+        <div class="hero-line"></div>
+        <div class="hero-inner">
+          <div>
+            <div class="panel-content" style="transition-delay:.0s">
+              <div class="live-pip"><span class="ldot"></span>Markets Open · Live Feed Active</div>
+              <div class="hero-kicker">Professional Trading Terminal</div>
+              <h1 class="hero-title">
+                Where every<br /><span>tick counts.</span>
+                <strong>Trade with<br /><span>precision.</span></strong>
+              </h1>
+              <p class="hero-sub">Real-time candlestick charts, live order book depth, algorithmic bot monitoring, and
+                instant order execution — built for traders who refuse to lose their edge.</p>
+              <div class="hbtns">
+                <button class="hbtn pri btn-signup">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  <span class="btn-text">Sign Up</span>
+                </button>
+                <button class="hbtn out btn-login">
+                  <span class="btn-text">Login</span>
+                </button>
+                <button class="hbtn out">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <line x1="8" y1="21" x2="16" y2="21" />
+                    <line x1="12" y1="17" x2="12" y2="21" />
+                  </svg>
+                  Live Demo
+                </button>
+                <button class="hbtn sec">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  How It Works
+                </button>
+              </div>
+              <div class="hero-stats">
+                <div>
+                  <div class="stat-val br">100<span style="font-size:13px;font-weight:300">msg/s</span></div>
+                  <div class="stat-lbl">Live Feed Speed</div>
+                </div>
+                <div>
+                  <div class="stat-val">$100K</div>
+                  <div class="stat-lbl">Starting Capital</div>
+                </div>
+                <div>
+                  <div class="stat-val">1s</div>
+                  <div class="stat-lbl">Chart Interval</div>
+                </div>
+                <div>
+                  <div class="stat-val up">+2.34%</div>
+                  <div class="stat-lbl">Session P&amp;L</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-content" style="transition-delay:.2s">
+            <div class="terminal">
+              <div class="tbar">
+                <div class="mdot" style="background:#f6465d"></div>
+                <div class="mdot" style="background:var(--brand)"></div>
+                <div class="mdot" style="background:var(--bull)"></div>
+                <div class="ttitle">SYNTHETIC BULL — Trading Terminal</div>
+              </div>
+              <div class="terminal-grid-top">
+                <div style="background:var(--raised);padding:12px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div style="font-size:12px;display:flex;align-items:center;gap:6px;color:var(--t2)">
+                      SBTC/USDT
+                      <span
+                        style="font-size:10px;background:var(--brand-dim);border:1px solid rgba(232,160,32,.18);color:var(--brand);padding:1px 5px;border-radius:2px">SYNTH</span>
+                      <span style="color:var(--t4)">1s</span>
+                    </div>
+                    <div style="text-align:right">
+                      <div id="h-price" style="font-size:15px;font-weight:600;color:var(--bull)">43,218.40</div>
+                      <div id="h-chg" style="font-size:11px;color:var(--bull)">▲ +2.34%</div>
+                    </div>
+                  </div>
+                  <!-- FIX: Use a 2D canvas for the hero chart instead of a missing Three.js container -->
+                  <canvas id="h-chart-canvas" width="400" height="180"
+                    style="width:100%;height:180px;background:#02050f;border-radius:2px;display:block"></canvas>
+                  <div style="display:flex;gap:4px;margin-top:6px">
+                    <span
+                      style="font-size:10px;padding:2px 6px;border-radius:2px;background:var(--brand-dim);color:var(--brand)">1s</span>
+                    <span style="font-size:10px;padding:2px 6px;border-radius:2px;color:var(--t3)">5s</span>
+                    <span style="font-size:10px;padding:2px 6px;border-radius:2px;color:var(--t3)">1m</span>
+                  </div>
+                </div>
+                <div style="background:var(--raised)">
+                  <div
+                    style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--t3)">
+                    <span>PRICE</span><span>SIZE</span>
+                  </div>
+                  <div id="h-asks"></div>
+                  <div
+                    style="text-align:center;padding:3px;font-size:10.5px;color:var(--brand);border-top:1px solid var(--border);border-bottom:1px solid var(--border)"
+                    id="h-spread">Spread: 0.50</div>
+                  <div id="h-bids"></div>
+                </div>
+              </div>
+              <div class="terminal-grid-bottom">
+                <div style="background:var(--raised);padding:12px">
+                  <div
+                    style="font-size:10px;color:var(--t4);letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px">
+                    Portfolio</div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span
+                      style="font-size:12px;color:var(--t3)">Cash</span><span
+                      style="font-size:12.5px;color:var(--brand)">$94,820</span></div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span
+                      style="font-size:12px;color:var(--t3)">Holdings</span><span
+                      style="font-size:12.5px;color:var(--t2)">0.1200 BTC</span></div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span
+                      style="font-size:12px;color:var(--t3)">Equity</span><span id="eq-val"
+                      style="font-size:12.5px;color:var(--t2)">$100,006</span></div>
+                  <div style="display:flex;justify-content:space-between"><span
+                      style="font-size:12px;color:var(--t3)">P&amp;L</span><span id="pnl-val"
+                      style="font-size:12.5px;color:var(--bull)">+$6.21</span></div>
+                </div>
+                <div style="background:var(--raised);padding:12px;overflow:hidden">
+                  <div
+                    style="font-size:7px;color:var(--t4);letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px">
+                    Bots Live</div>
+                  <div id="h-bots"></div>
+                </div>
+              </div>
+              <div
+                style="background:linear-gradient(90deg,rgba(232,160,32,.12),rgba(232,160,32,.04));border-top:1px solid rgba(232,160,32,.16);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+                <div style="font-size:8px;color:var(--brand);letter-spacing:.14em">START TRADING IN 30 SECONDS</div>
+                <button
+                  style="font-size:10px;font-weight:700;letter-spacing:.12em;padding:6px 14px;background:var(--brand);color:#000;border:none;border-radius:2px;cursor:none"><span
+                    class="btn-text">GET STARTED FREE</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TRUSTED BY MARQUEE -->
+      <div class="trust-wrap panel" id="p-marquee" data-index="1" style="height:auto;min-height:220px">
+        <div class="panel-content" style="width:100%">
+          <div class="trust-title">Trusted by <span>100,000+</span> Professional Traders</div>
+          <div class="trust-sub">Trade 5 high-frequency synthetic instruments. Zero latency. 24/7 matching engine.</div>
+          <div class="stock-mq-wrap">
+            <div class="stock-mq-track" id="stock-ticker-track"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 2: FEATURES -->
+      <div class="panel" id="p-features" data-index="1" style="min-height:70vh">
+        <div class="features-inner">
+          <div class="features-header fmt-hide">
+            <div class="panel-content">
+              <div class="eyebrow">What You Get</div>
+              <h2 class="section-title">Every edge,<br /><span>live &amp; instant.</span></h2>
+              <p class="section-sub">Five core modules built to stay fast at 100 market messages per second.</p>
+            </div>
+          </div>
+          <div class="feat-row drag-track">
+            <div class="facc slide-r" style="animation-delay: 0.1s">
+              <div class="facc-inner">
+                <div class="facc-num">CHARTS</div>
+                <div class="facc-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.8">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg></div>
+                <div class="facc-name">LIVE CANDLESTICK CHARTS</div>
+                <div class="facc-desc">Watch every price move as it happens. Candles refresh on 1-second and 5-second
+                  intervals with zero delay.</div>
+                <div class="facc-tags"><span class="tag">1s Candles</span><span class="tag">5s</span><span
+                    class="tag">OHLCV</span></div>
+              </div>
+              <div class="facc-accent"></div>
+            </div>
+            <div class="facc slide-r" style="animation-delay: 0.2s">
+              <div class="facc-inner">
+                <div class="facc-num">ORDER BOOK</div>
+                <div class="facc-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.8">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg></div>
+                <div class="facc-name">REAL-TIME DEPTH &amp; ORDER BOOK</div>
+                <div class="facc-desc">Every bid and ask streams live. Depth bars reveal exactly where buying and
+                  selling pressure stacks.</div>
+                <div class="facc-tags"><span class="tag">Live Diffs</span><span class="tag">Depth Bars</span><span
+                    class="tag">Spread</span></div>
+              </div>
+              <div class="facc-accent"></div>
+            </div>
+            <div class="facc slide-r" style="animation-delay: 0.3s">
+              <div class="facc-inner">
+                <div class="facc-num">EXECUTION</div>
+                <div class="facc-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.8">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="16" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                  </svg></div>
+                <div class="facc-name">ONE-CLICK ORDER PLACEMENT</div>
+                <div class="facc-desc">Market or limit orders execute with a single click. Your position appears on
+                  screen immediately.</div>
+                <div class="facc-tags"><span class="tag">Market</span><span class="tag">Limit</span><span
+                    class="tag">Instant Fill</span></div>
+              </div>
+              <div class="facc-accent"></div>
+            </div>
+            <div class="facc slide-r" style="animation-delay: 0.4s">
+              <div class="facc-inner">
+                <div class="facc-num">PORTFOLIO</div>
+                <div class="facc-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.8">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                    <polyline points="17 6 23 6 23 12" />
+                  </svg></div>
+                <div class="facc-name">LIVE P&amp;L DASHBOARD</div>
+                <div class="facc-desc">Cash, holdings, total equity and unrealised profit — all updating 10 times per
+                  second as the market moves.</div>
+                <div class="facc-tags"><span class="tag">Real-Time P&amp;L</span><span class="tag">Equity</span></div>
+              </div>
+              <div class="facc-accent"></div>
+            </div>
+            <div class="facc slide-r" style="animation-delay: 0.5s">
+              <div class="facc-inner">
+                <div class="facc-num">AUTOMATION</div>
+                <div class="facc-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.8">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                    <path d="M2 17l10 5 10-5" />
+                    <path d="M2 12l10 5 10-5" />
+                  </svg></div>
+                <div class="facc-name">ALGORITHMIC BOT MONITOR</div>
+                <div class="facc-desc">Watch the Market Maker and Alpha Bot trade live — every entry and exit feeds your
+                  dashboard in real time.</div>
+                <div class="facc-tags"><span class="tag">Market Maker</span><span class="tag">Alpha Bot</span><span
+                    class="tag">Win Rate</span></div>
+              </div>
+              <div class="facc-accent"></div>
+            </div>
+          </div>
+          <div class="feat-progress-container">
+            <div id="feat-pbar" class="feat-progress-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 3: PERFORMANCE -->
+      <div class="panel" id="p-performance" data-index="2">
+        <div class="perf-inner">
+          <div>
+            <div class="panel-content">
+              <div class="eyebrow">Performance Benchmarks</div>
+              <h2 class="section-title">Numbers that<br /><span>don't lie.</span></h2>
+              <p class="section-sub">Six hard constraints that keep the terminal running at full speed in real market
+                conditions.</p>
+              <div style="margin-top:34px;display:flex;flex-direction:column;gap:13px">
+                <div style="display:flex;align-items:center;gap:13px">
+                  <div style="width:34px;height:1px;background:var(--brand);opacity:.4"></div><span
+                    style="font-size:10px;color:var(--t3)">Sub-millisecond data routing</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:13px">
+                  <div style="width:55px;height:1px;background:var(--brand);opacity:.6"></div><span
+                    style="font-size:10px;color:var(--t3)">60fps canvas rendering</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:13px">
+                  <div style="width:89px;height:1px;background:var(--brand);opacity:.9"></div><span
+                    style="font-size:10px;color:var(--t3)">100 msg/s throughput</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric-card slide-l" style="animation-delay: 0.1s">
+              <div class="metric-num">60<span class="metric-unit">fps</span></div>
+              <div class="metric-label">CHART REFRESH</div>
+              <div class="metric-desc">Smooth at any tick rate. Never falls behind.</div>
+            </div>
+            <div class="metric-card slide-r" style="animation-delay: 0.2s">
+              <div class="metric-num">O<span class="metric-unit">(1)</span></div>
+              <div class="metric-label">ORDER BOOK SPEED</div>
+              <div class="metric-desc">Constant-time updates no matter how fast prices move.</div>
+            </div>
+            <div class="metric-card slide-l" style="animation-delay: 0.3s">
+              <div class="metric-num">1<span class="metric-unit">ws</span></div>
+              <div class="metric-label">LIVE CONNECTION</div>
+              <div class="metric-desc">One stream — price, book, bots — all in sync.</div>
+            </div>
+            <div class="metric-card slide-r" style="animation-delay: 0.4s">
+              <div class="metric-num">10<span class="metric-unit">fps</span></div>
+              <div class="metric-label">P&amp;L UPDATE RATE</div>
+              <div class="metric-desc">Fast enough to trade on. Stable enough to read.</div>
+            </div>
+            <div class="metric-card slide-l" style="animation-delay: 0.5s">
+              <div class="metric-num">50<span class="metric-unit">rows</span></div>
+              <div class="metric-label">BOT FEED CAP</div>
+              <div class="metric-desc">Fluid at 100 automated trades per second.</div>
+            </div>
+            <div class="metric-card slide-r" style="animation-delay: 0.6s">
+              <div class="metric-num">0<span class="metric-unit">lag</span></div>
+              <div class="metric-label">CHART OVERHEAD</div>
+              <div class="metric-desc">Straight to GPU. Zero UI framework cycles.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 4: BOTS -->
+      <div class="panel" id="p-bots" data-index="3">
+        <div class="bots-inner">
+          <div class="fmt-hide">
+            <div class="panel-content">
+              <div class="eyebrow">Automated Strategies</div>
+              <h2 class="section-title">Two bots.<br /><span>Always working.</span></h2>
+              <p class="section-sub">Watch the Market Maker and Alpha Bot trade live. Every entry, every exit —
+                streaming to your dashboard in real time.</p>
+              <div style="margin-top:var(--s5);display:flex;flex-direction:column;gap:var(--s3)">
+                <div
+                  style="display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);background:rgba(24,201,106,.04);border:1px solid rgba(24,201,106,.1);border-radius:6px">
+                  <span class="ldot"></span>
+                  <div>
+                    <div style="font-size:13px;letter-spacing:.1em;color:var(--t2);font-weight:700">MARKET MAKER</div>
+                    <div style="font-size:14px;color:var(--bull);font-weight:600">+$1,240 today</div>
+                  </div>
+                </div>
+                <div
+                  style="display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);background:rgba(24,201,106,.04);border:1px solid rgba(24,201,106,.1);border-radius:6px">
+                  <span class="ldot amb"></span>
+                  <div>
+                    <div style="font-size:13px;letter-spacing:.1em;color:var(--t2);font-weight:700">ALPHA BOT</div>
+                    <div style="font-size:14px;color:var(--bull);font-weight:600">68.4% win rate</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bots-grid panel-content d1">
+            <div class="bot-card fmt-hide-fast">
+              <div class="bot-hdr">
+                <div class="ldot"></div>
+                <div class="bot-name">MARKET MAKER BOT</div>
+                <div class="bot-badge">RUNNING</div>
+              </div>
+              <div class="bot-body">
+                <div class="bot-stats">
+                  <div>
+                    <div class="bot-sl">Session P&amp;L</div>
+                    <div class="bot-sv bull">+$1,240</div>
+                  </div>
+                  <div>
+                    <div class="bot-sl">Total Trades</div>
+                    <div class="bot-sv">2,841</div>
+                  </div>
+                  <div>
+                    <div class="bot-sl">Spread</div>
+                    <div class="bot-sv br">$0.50</div>
+                  </div>
+                  <div>
+                    <div class="bot-sl">Last Action</div>
+                    <div class="bot-sv" style="color:var(--bull);font-size:16px">BUY 0.10</div>
+                  </div>
+                </div>
+                <div class="feed-lbl">Live Trade Feed</div>
+                <div id="mm-feed"></div>
+              </div>
+            </div>
+            <div class="bot-card fmt-hide-fast" style="background:rgba(24,201,106,.03);border-color:rgba(24,201,106,.15)">
+              <div class="bot-hdr">
+                <div class="ldot amb"></div>
+                <div class="bot-name">ALPHA BOT</div>
+                <div class="bot-badge">RUNNING</div>
+              </div>
+              <div class="bot-body">
+                <div class="bot-stats">
+                  <div>
+                    <div class="bot-sl">Session P&amp;L</div>
+                    <div class="bot-sv bull">+$3,812</div>
+                  </div>
+                  <div>
+                    <div class="bot-sl">Total Trades</div>
+                    <div class="bot-sv">318</div>
+                  </div>
+                  <div>
+                    <div class="bot-sl">Win Rate</div>
+                    <div class="bot-sv br">68.4%</div>
+                  </div>
+                  <div>
+                    <div class="bot-sl">Last Action</div>
+                    <div class="bot-sv" style="color:var(--bear);font-size:16px">SELL 0.25</div>
+                  </div>
+                </div>
+                <div class="feed-lbl">Live Trade Feed</div>
+                <div id="alpha-feed"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 5: DEPTH -->
+      <div class="panel" id="p-depth" data-index="4">
+        <div class="depth-inner">
+          <div class="fmt-hide">
+            <div class="panel-content">
+              <div class="eyebrow">Market Depth</div>
+              <h2 class="section-title">See the full<br /><span>book at a glance.</span></h2>
+              <p class="section-sub">The cumulative bid/ask area chart shows exactly where buying and selling pressure
+                stacks up — visual, immediate, actionable.</p>
+              <div class="depth-legend" style="display:flex;gap:var(--s4);margin-top:var(--s4)">
+                <div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--t3)">
+                  <div
+                    style="width:10px;height:10px;border-radius:1px;background:rgba(24,201,106,.25);border:1px solid rgba(24,201,106,.4)">
+                  </div>Cumulative Bids
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--t3)">
+                  <div
+                    style="width:10px;height:10px;border-radius:1px;background:rgba(232,53,53,.25);border:1px solid rgba(232,53,53,.4)">
+                  </div>Cumulative Asks
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-content d1 fmt-hide">
+            <div class="depth-wrap">
+              <div class="depth-hdr">
+                <span>Depth Chart — SBTC/USDT</span>
+                <span style="color:var(--brand)" id="depth-mid">Mid: 43,218.25</span>
+              </div>
+              <canvas id="depth-canvas" width="560" height="240" style="width:100%;display:block"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 6: ORDER TYPES -->
+      <div class="panel" id="p-orders"
+        style="min-height:90vh;display:flex;align-items:center;border-bottom:1px solid var(--border);">
+        <div class="orders-inner">
+          <div class="op-reveal fmt-hide" style="text-align:left;margin-bottom:var(--s6);">
+            <div class="eyebrow" style="justify-content:flex-start">Execution Engine</div>
+            <h2 class="section-title">Precision Routing.<br /><span>Four conditional triggers.</span></h2>
+            <p class="section-sub" style="margin:var(--s3) 0 0;">Whether sweeping liquidity or defending capital, the
+              matching engine executes your intent with deterministic guarantees.</p>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s4);">
+            <div class="order-card op-card fmt-hide-fast">
+              <div class="oc-type">MARKET</div>
+              <div class="oc-desc">Sweeps the order book instantly at the best available prices. Prioritizes certainty
+                of execution over price control.</div>
+              <div class="oc-tags"><span class="tag">Instant Fill</span><span class="tag">Taker Fee</span></div>
+            </div>
+            <div class="order-card op-card fmt-hide-fast">
+              <div class="oc-type">LIMIT</div>
+              <div class="oc-desc">Rests on the book, visible to the market. Executes exactly at your limit price or
+                better. Zero slippage.</div>
+              <div class="oc-tags"><span class="tag">Price Control</span><span class="tag">Maker Fee</span></div>
+            </div>
+            <div class="order-card op-card fmt-hide-fast">
+              <div class="oc-type">STOP-MARKET</div>
+              <div class="oc-desc">Hides until price crosses your stop-trigger level, then blasts an aggressive market
+                order to ensure you get out.</div>
+              <div class="oc-tags"><span class="tag">Stop Loss</span><span class="tag">Aggressive</span></div>
+            </div>
+            <div class="order-card op-card fmt-hide-fast">
+              <div class="oc-type">STOP-LIMIT</div>
+              <div class="oc-desc">Once triggered by price, places a passive limit order. Controls your entry without
+                exposing liquidity beforehand.</div>
+              <div class="oc-tags"><span class="tag">Breakout</span><span class="tag">No Slippage</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 7: CTA -->
+      <div class="panel" id="p-cta" data-index="5">
+        <div class="cta-glow"></div>
+        <div class="cta-ring"></div>
+        <div class="cta-ring cta-ring2"></div>
+        <div class="cta-ring cta-ring3"></div>
+        <div class="cta-inner panel-content fmt-hide">
+          <div class="eyebrow" style="justify-content:center">Start for Free</div>
+          <h2 class="section-title">Your edge<br /><span>starts here.</span></h2>
+          <p class="cta-sub">Open an account, connect to the live feed, and trade with the speed and clarity of a
+            professional desk — at no cost to start.</p>
+          <div style="display:flex;gap:var(--s2);justify-content:center;flex-wrap:wrap">
+            <button class="hbtn pri btn-signup"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg><span class="btn-text">Sign Up</span></button>
+              <button class="hbtn out btn-login" style="padding: 0 24px; border: 1px solid var(--border); background: transparent; color: var(--t1); border-radius: 4px; font-weight: 600; text-transform: uppercase; font-size: 14px; cursor: pointer; letter-spacing: 0.1em;">
+                <span class="btn-text">Login</span>
+              </button>
+            <button class="hbtn sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path
+                  d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+              </svg>View on GitHub</button>
+          </div>
+          <div style="display:flex;gap:var(--s5);justify-content:center;margin-top:var(--s6)">
+            <div style="text-align:center">
+              <div
+                style="font-family:'Barlow Semi Condensed',sans-serif;font-size:var(--fs-2xl);font-weight:800;color:var(--t1)">
+                $0</div>
+              <div style="font-size:8px;letter-spacing:.2em;color:var(--t3);margin-top:var(--s1)">COST TO START</div>
+            </div>
+            <div style="width:1px;background:var(--border)"></div>
+            <div style="text-align:center">
+              <div
+                style="font-family:'Barlow Semi Condensed',sans-serif;font-size:var(--fs-2xl);font-weight:800;color:var(--bull)">
+                100</div>
+              <div style="font-size:8px;letter-spacing:.2em;color:var(--t3);margin-top:var(--s1)">MSG PER SECOND</div>
+            </div>
+            <div style="width:1px;background:var(--border)"></div>
+            <div style="text-align:center">
+              <div
+                style="font-family:'Barlow Semi Condensed',sans-serif;font-size:var(--fs-2xl);font-weight:800;color:var(--brand)">
+                30s</div>
+              <div style="font-size:8px;letter-spacing:.2em;color:var(--t3);margin-top:var(--s1)">TO FIRST TRADE</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section id="p-blackhole" class="panel" data-index="6" style="position:relative;height:120vh;background:#000;overflow:clip">
+        <div class="bh-sticky">
+          <canvas id="bh-canvas" style="position:absolute;inset:0;z-index:5;width:100%;height:100%"></canvas>
+          <div id="bh-content" class="bh-content">
+            <div class="bh-sub"><span class="desktop-only-bh" style="color:var(--brand)">Market Pulse</span></div>
+            <h2 class="bh-title">
+              <span class="desktop-only-bh">Global&nbsp;Liquidity<br>Network</span>
+              <span class="mobile-only" style="display:flex;align-items:center;gap:12px">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="#5AF2B5">
+                  <polygon points="12,2 22,22 2,22" />
+                </svg>
+                Synthetic <b>Bull</b>
+              </span>
+            </h2>
+            <div class="bh-desc-mobile">
+              Professional-grade trading terminal. Real-time feeds. Sub-millisecond data. Built for traders who demand
+              clarity under pressure.
+            </div>
+            <a href="/terminal" class="bh-cta" style="background:var(--brand); color:#000;">Analyze The Flow</a>
+          </div>
+        </div>
+      </section>
+
+      <div id="p-stats" class="panel" data-index="7" style="position:relative;min-height:60vh;background:#03090d;display:flex;align-items:center;justify-content:center;overflow:hidden;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(90,242,181,0.07) 0%,transparent 60%);pointer-events:none"></div>
+        <div style="text-align:center;padding:var(--s8) var(--s6);max-width:1100px;width:100%;position:relative;z-index:2">
+          <div style="font-size:10px;letter-spacing:.3em;color:var(--brand);text-transform:uppercase;margin-bottom:var(--s3)">Trading Summary</div>
+          <h2 style="font-family:'Barlow Semi Condensed',sans-serif;font-size:clamp(32px,4vw,60px);font-weight:800;color:var(--t1);line-height:.95;margin-bottom:var(--s5)">Built for speed.<br><span style="color:var(--brand)">Priced at zero.</span></h2>
+          <p style="color:var(--t3);font-size:clamp(13px,1.1vw,16px);max-width:560px;margin:0 auto var(--s7)">Professional-grade tools &mdash; live order book, candlestick charts, algorithmic bots, and instant order execution &mdash; all in one terminal with no cost to start.</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--s4);margin-bottom:var(--s7)">
+            <div style="background:rgba(90,242,181,0.04);border:1px solid rgba(90,242,181,0.12);border-radius:8px;padding:var(--s5)">
+              <div style="font-size:36px;font-weight:800;font-family:'Barlow Semi Condensed',sans-serif;color:var(--brand)" id="stat-latency">&lt;1ms</div>
+              <div style="font-size:10px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-top:6px">Data Latency</div>
+              <div style="font-size:12px;color:var(--t4);margin-top:4px">Sub-millisecond routing</div>
+            </div>
+            <div style="background:rgba(24,201,106,0.04);border:1px solid rgba(24,201,106,0.12);border-radius:8px;padding:var(--s5)">
+              <div style="font-size:36px;font-weight:800;font-family:'Barlow Semi Condensed',sans-serif;color:var(--bull)" id="stat-msg">100</div>
+              <div style="font-size:10px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-top:6px">Msg/s Throughput</div>
+              <div style="font-size:12px;color:var(--t4);margin-top:4px">All feeds in parallel</div>
+            </div>
+            <div style="background:rgba(90,242,181,0.04);border:1px solid rgba(90,242,181,0.12);border-radius:8px;padding:var(--s5)">
+              <div style="font-size:36px;font-weight:800;font-family:'Barlow Semi Condensed',sans-serif;color:var(--brand)">$100K</div>
+              <div style="font-size:10px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-top:6px">Starting Capital</div>
+              <div style="font-size:12px;color:var(--t4);margin-top:4px">Paper trading &mdash; zero risk</div>
+            </div>
+            <div style="background:rgba(24,201,106,0.04);border:1px solid rgba(24,201,106,0.12);border-radius:8px;padding:var(--s5)">
+              <div style="font-size:36px;font-weight:800;font-family:'Barlow Semi Condensed',sans-serif;color:var(--bull)">5</div>
+              <div style="font-size:10px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-top:6px">Live Instruments</div>
+              <div style="font-size:12px;color:var(--t4);margin-top:4px">AAPL · AMZN · GOOGL · MSFT · TSLA</div>
+            </div>
+          </div>
+          <a href="/terminal" class="bh-cta" style="display:inline-block;padding:14px 40px;background:var(--brand);color:#000;font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;border-radius:3px">Start Trading Now</a>
+        </div>
+      </div>
+
+
+  </div><!-- end scroll-container -->
+
+  </div><!-- end app-view -->
+
+  <script src="https://unpkg.com/lenis@1.1.13/dist/lenis.min.js"></script>
+
+  <script>
+    // ─── ALL JS in one place, after DOM is ready ───
+    window.addEventListener('DOMContentLoaded', () => {
+
+      // ─── UTILITY ───
+      function fmt(p) { return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+
+      // ─── MOUSE GLOW (defined early so audio ctrl can use it) ───
+      function trackM(el, e) {
+        const r = el.getBoundingClientRect();
+        el.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+        el.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+      }
+      window.trackM = trackM;
+
+      // ─── LENIS SMOOTH SCROLL ───
+      window.lenis = new Lenis({
+        wrapper: document.getElementById('scroll-container'),
+        duration: 1.2,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        orientation: 'vertical',
+        smoothWheel: true,
+        wheelMultiplier: 1,
+        touchMultiplier: 2,
+      });
+      function raf(time) { window.lenis.raf(time); requestAnimationFrame(raf); }
+      requestAnimationFrame(raf);
+
+      // ─── MOBILE MENU ───
+      document.getElementById('hamburger-btn').addEventListener('click', () => document.getElementById('mobile-menu').classList.add('open'));
+      document.getElementById('menu-close').addEventListener('click', () => document.getElementById('mobile-menu').classList.remove('open'));
+
+      // ─── SCROLL PANELS & DOTS ───
+      const sc = document.getElementById('scroll-container');
+      const panels = Array.from(document.querySelectorAll('.panel[data-index]'));
+      const dotsEl = document.getElementById('scroll-dots');
+
+      panels.forEach((_, i) => {
+        const d = document.createElement('div');
+        d.className = 'sdot' + (i === 0 ? ' active' : '');
+        d.addEventListener('click', () => goPanel(i));
+        dotsEl.appendChild(d);
+      });
+
+      function goPanel(i) {
+        if (!panels[i]) return;
+        window.lenis.scrollTo(panels[i], { offset: 0, duration: 1.5, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)) });
+      }
+      window.goPanel = goPanel;
+
+      // Wire nav links — skip the marquee panel (data-index="1" on p-marquee) by mapping nav indices to actual panels by ID
+      const panelById = (id) => document.getElementById(id);
+      const navPanelMap = ['p-hero', 'p-features', 'p-performance', 'p-bots', 'p-depth'];
+      for (let i = 0; i < 5; i++) {
+        const el = document.getElementById('nav-' + i);
+        if (el) el.addEventListener('click', (e) => {
+          e.preventDefault();
+          const target = panelById(navPanelMap[i]);
+          if (target) window.lenis.scrollTo(target, { offset: 0, duration: 1.5, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)) });
+        });
+      }
+      document.querySelectorAll('.m-link[data-panel]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          document.getElementById('mobile-menu').classList.remove('open');
+          goPanel(parseInt(el.dataset.panel));
+        });
+      });
+
+      const panelObs = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            const idx = parseInt(entry.target.dataset.index);
+            document.querySelectorAll('.sdot').forEach((d, i) => d.classList.toggle('active', i === idx));
+            document.querySelectorAll('.nav-links a').forEach((a, i) => a.style.color = (i === idx) ? 'var(--brand)' : 'var(--t3)');
+          }
+        });
+      }, { root: sc, threshold: .45 });
+
+      panels.forEach(p => panelObs.observe(p));
+      panels[0].classList.add('visible');
+
+      // ─── CURSOR ───
+      const cur = document.getElementById('cur'), ring = document.getElementById('cur-ring');
+      let mx = window.innerWidth / 2, my = window.innerHeight / 2, rx = mx, ry = my;
+      cur.style.left = mx + 'px'; cur.style.top = my + 'px';
+      ring.style.left = mx + 'px'; ring.style.top = my + 'px';
+      document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; cur.style.left = mx + 'px'; cur.style.top = my + 'px'; });
+      (function animRing() { rx += (mx - rx) * .1; ry += (my - ry) * .1; ring.style.left = rx + 'px'; ring.style.top = ry + 'px'; requestAnimationFrame(animRing); })();
+
+      document.querySelectorAll('button, a, .facc, .metric-card, .bot-card, .sdot, .op-card, .scard').forEach(el => {
+        el.addEventListener('mouseenter', () => { cur.style.width = '14px'; cur.style.height = '14px'; ring.style.width = '44px'; ring.style.height = '44px'; ring.style.borderColor = 'rgba(90, 242, 181, .85)'; });
+        el.addEventListener('mouseleave', () => { cur.style.width = '6px'; cur.style.height = '6px'; ring.style.width = '28px'; ring.style.height = '28px'; ring.style.borderColor = 'rgba(90, 242, 181, .5)'; });
+      });
+
+      // ─── BUTTON TILT ───
+      const MAX_ANGLE = 38, DEAD_ZONE = 0.12, TILT_DUR = '0.14s ease-out', SPRING_DUR = '0.5s cubic-bezier(.34,1.56,.64,1)';
+      document.querySelectorAll('button').forEach(btn => {
+        if (!btn.querySelector('.btn-flip-inner')) {
+          const wrap = document.createElement('span');
+          wrap.className = 'btn-flip-inner';
+          while (btn.firstChild) wrap.appendChild(btn.firstChild);
+          btn.appendChild(wrap);
+        }
+        const reset = (inner) => { inner.style.transition = `transform ${SPRING_DUR}, opacity ${SPRING_DUR}`; inner.style.transform = 'perspective(500px) rotateX(0deg)'; inner.style.opacity = '1'; };
+        btn.addEventListener('mousedown', function (e) {
+          const inner = this.querySelector('.btn-flip-inner'); if (!inner) return;
+          const rect = this.getBoundingClientRect();
+          const offset = ((e.clientY - rect.top) - rect.height / 2) / (rect.height / 2);
+          if (Math.abs(offset) < DEAD_ZONE) return;
+          const angle = -offset * MAX_ANGLE;
+          this.classList.remove('btn-shimmer'); void this.offsetWidth; this.classList.add('btn-shimmer');
+          setTimeout(() => this.classList.remove('btn-shimmer'), 300);
+          inner.style.transition = `transform ${TILT_DUR}, opacity ${TILT_DUR}`;
+          inner.style.transform = `perspective(500px) rotateX(${angle}deg)`;
+          inner.style.opacity = String(0.5 + 0.3 * (1 - Math.abs(offset)));
+        });
+        btn.addEventListener('mouseup', function () { const i = this.querySelector('.btn-flip-inner'); if (i) reset(i); });
+        btn.addEventListener('mouseleave', function () { const i = this.querySelector('.btn-flip-inner'); if (i) reset(i); });
+      });
+
+      // ─── CARD 3D TILT ───
+      document.querySelectorAll('.bot-card, .op-card').forEach(card => {
+        card.style.transformStyle = 'preserve-3d';
+        card.addEventListener('mousedown', function (e) {
+          const rect = this.getBoundingClientRect();
+          const offX = ((e.clientX - rect.left) - rect.width / 2) / (rect.width / 2);
+          const offY = ((e.clientY - rect.top) - rect.height / 2) / (rect.height / 2);
+          if (Math.abs(offX) < DEAD_ZONE && Math.abs(offY) < DEAD_ZONE) return;
+          this.style.animation = 'none'; this.style.transition = `transform 0.12s ease-out`; void this.offsetWidth;
+          this.style.transform = `perspective(900px) rotateX(${-(offY * 22)}deg) rotateY(${offX * 22}deg)`;
+        });
+        const resetCard = function () { this.style.transition = `transform 0.55s cubic-bezier(.34,1.56,.64,1), box-shadow 0.5s, border-color 0.4s`; this.style.transform = ''; };
+        card.addEventListener('mouseup', resetCard); card.addEventListener('mouseleave', resetCard);
+      });
+
+      // ─── EDGE GLOW DIVS ───
+      document.querySelectorAll('.bot-card, .op-card, .metric-card, .facc').forEach(card => {
+        ['card-edge-top', 'card-edge-bottom', 'card-edge-left', 'card-edge-right'].forEach(cls => {
+          if (!card.querySelector('.' + cls)) { const el = document.createElement('div'); el.className = cls; card.prepend(el); }
+        });
+      });
+
+      // ─── OP CARD MOUSE GLOW ───
+      document.querySelectorAll('.op-card').forEach(card => card.addEventListener('mousemove', e => trackM(card, e)));
+
+      // ─── DRAG TO SCROLL (features) ───
+      const slider = document.querySelector('.drag-track');
+      const pbar = document.getElementById('feat-pbar');
+      if (slider) {
+        let isDown = false, startX, scrollLeft;
+        slider.addEventListener('mousedown', e => { isDown = true; startX = e.pageX - slider.offsetLeft; scrollLeft = slider.scrollLeft; });
+        slider.addEventListener('mouseleave', () => isDown = false);
+        slider.addEventListener('mouseup', () => isDown = false);
+        slider.addEventListener('mousemove', e => { if (!isDown) return; e.preventDefault(); slider.scrollLeft = scrollLeft - (e.pageX - slider.offsetLeft - startX) * 2; });
+        slider.addEventListener('scroll', () => { const max = slider.scrollWidth - slider.clientWidth; if (pbar && max > 0) pbar.style.width = (slider.scrollLeft / max * 100) + '%'; });
+      }
+
+      // ─── TICKER ───
+      const TICKS = [
+        { s: 'SBTC/USDT', p: 43218.40, d: +2.34 }, { s: 'SETH/USDT', p: 2891.55, d: +1.87 },
+        { s: 'SNIFTY', p: 22104.80, d: -.43 }, { s: 'SGOLD', p: 2312.10, d: +.92 },
+        { s: 'SBNB', p: 598.20, d: +3.11 }, { s: 'SCRUDE', p: 84.37, d: -1.02 },
+        { s: 'SSOL', p: 168.45, d: +5.22 }, { s: 'SINR/USD', p: 83.42, d: -.18 },
+      ];
+      const tickerEl = document.getElementById('ticker');
+      if (tickerEl) tickerEl.innerHTML = [...TICKS, ...TICKS].map(t =>
+        `<div class="tick-item"><span class="tick-sym">${t.s}</span><span class="tick-px">${fmt(t.p)}</span><span class="${t.d >= 0 ? 'tick-up' : 'tick-dn'}">${t.d >= 0 ? '+' : ''}${t.d.toFixed(2)}%</span></div>`
+      ).join('');
+
+      // ─── STOCK MARQUEE ───
+      const stockT = document.getElementById('stock-ticker-track');
+      let stx = [
+        { s: 'AAPL_S', n: 'Apple Synthetic', p: 180.45, c: 2.14 },
+        { s: 'GOOGL_S', n: 'Google Synthetic', p: 140.20, c: -0.85 },
+        { s: 'TSLA_S', n: 'Tesla Synthetic', p: 200.15, c: 4.52 },
+        { s: 'MSFT_S', n: 'Microsoft Synth', p: 380.05, c: 1.25 },
+        { s: 'AMZN_S', n: 'Amazon Synthetic', p: 170.80, c: -1.50 },
+      ];
+      if (stockT) {
+        const stxHtml = stx.map((t, i) => `
+          <div class="scard" data-idx="${i}">
+            <div class="sc-edge-t"></div><div class="sc-edge-b"></div><div class="sc-edge-l"></div><div class="sc-edge-r"></div>
+            <div class="sc-hdr" style="position:relative;z-index:2">
+              <div><div class="sc-sym">${t.s}</div></div>
+              <div class="sc-logo">${t.s[0]}</div>
+            </div>
+            <div class="sc-price-row" style="position:relative;z-index:2">
+              <span class="sc-price">$${t.p.toFixed(2)}</span>
+              <span class="sc-chg ${t.c >= 0 ? 'up' : 'dn'}">${t.c >= 0 ? '▲' : '▼'} ${t.c >= 0 ? '+' : ''}${t.c.toFixed(2)}%</span>
+            </div>
+          </div>`).join('');
+        stockT.innerHTML = stxHtml + stxHtml + stxHtml + stxHtml;
+        stockT.querySelectorAll('.scard').forEach(card => card.addEventListener('mousemove', e => trackM(card, e)));
+        setInterval(() => {
+          stx = stx.map(t => ({ ...t, p: Math.max(1, t.p + (Math.random() - .5) * 1.5), c: t.c + (Math.random() - .5) * 0.2 }));
+          stockT.querySelectorAll('.scard').forEach(c => {
+            const t = stx[parseInt(c.dataset.idx)]; if (!t) return;
+            c.querySelector('.sc-price').textContent = '$' + t.p.toFixed(2);
+            const chg = c.querySelector('.sc-chg');
+            chg.className = 'sc-chg ' + (t.c >= 0 ? 'up' : 'dn');
+            chg.textContent = (t.c >= 0 ? '▲ +' : '▼ ') + t.c.toFixed(2) + '%';
+          });
+        }, 1500);
+      }
+
+      // ─── HERO CHART (2D Canvas) ───
+      const heroCanvas = document.getElementById('h-chart-canvas');
+      if (heroCanvas) {
+        const ctx = heroCanvas.getContext('2d');
+        let cand = [];
+        let basePrice = 43000;
+        for (let i = 0; i < 60; i++) {
+          const o = basePrice, c = o + (Math.random() - .46) * 65;
+          cand.push({ o, h: Math.max(o, c) + Math.random() * 22, l: Math.min(o, c) - Math.random() * 22, c });
+          basePrice = c;
+        }
+        function drawHeroChart() {
+          const w = heroCanvas.width, h = heroCanvas.height;
+          ctx.clearRect(0, 0, w, h);
+          ctx.fillStyle = '#02050f'; ctx.fillRect(0, 0, w, h);
+          const slice = cand.slice(-40);
+          const prices = slice.flatMap(d => [d.h, d.l]);
+          const minP = Math.min(...prices), maxP = Math.max(...prices);
+          const range = maxP - minP || 1;
+          const cw = w / slice.length;
+          slice.forEach((d, i) => {
+            const isUp = d.c >= d.o;
+            const color = isUp ? '#0ecb81' : '#f6465d';
+            const x = i * cw + cw * 0.5;
+            const yH = (1 - (d.h - minP) / range) * h;
+            const yL = (1 - (d.l - minP) / range) * h;
+            const yO = (1 - (d.o - minP) / range) * h;
+            const yC = (1 - (d.c - minP) / range) * h;
+            ctx.strokeStyle = color; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(x, yH); ctx.lineTo(x, yL); ctx.stroke();
+            ctx.fillStyle = color;
+            const bw = Math.max(1, cw * 0.6);
+            ctx.fillRect(x - bw / 2, Math.min(yO, yC), bw, Math.max(1, Math.abs(yC - yO)));
+          });
+        }
+        drawHeroChart();
+        setInterval(() => {
+          const last = cand[cand.length - 1], nc = last.c + (Math.random() - .47) * 52;
+          cand[cand.length - 1] = { ...last, c: nc, h: Math.max(last.h, nc), l: Math.min(last.l, nc) };
+          if (Math.random() < .08) { if (cand.length > 80) cand.shift(); cand.push({ o: nc, h: nc, l: nc, c: nc }); }
+          drawHeroChart();
+          const pd = document.getElementById('h-price'); if (pd) pd.textContent = fmt(nc);
+          const up = nc >= 43000;
+          const cd = document.getElementById('h-chg'); if (cd) { cd.textContent = (up ? '▲ +' : '▼ ') + Math.abs((nc - 43000) / 43000 * 100).toFixed(2) + '%'; cd.style.color = up ? '#0ecb81' : '#f6465d'; }
+          const eq = 94820 + .12 * nc, pnl = eq - 100000;
+          const ev = document.getElementById('eq-val'); if (ev) ev.textContent = '$' + fmt(eq);
+          const pv = document.getElementById('pnl-val'); if (pv) { pv.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2); pv.style.color = pnl >= 0 ? '#0ecb81' : '#f6465d'; }
+        }, 1000);
+      }
+
+      // ─── ORDER BOOK ───
+      let asks = [{ p: 43221.00, s: .45 }, { p: 43220.50, s: 1.20 }, { p: 43220.00, s: .82 }, { p: 43219.50, s: 2.10 }, { p: 43219.00, s: .37 }];
+      let bids = [{ p: 43218.50, s: 1.85 }, { p: 43218.00, s: .93 }, { p: 43217.50, s: 3.40 }, { p: 43217.00, s: .61 }, { p: 43216.50, s: 1.10 }];
+      function renderOB() {
+        const mA = Math.max(...asks.map(l => l.s)), mB = Math.max(...bids.map(l => l.s));
+        const aEl = document.getElementById('h-asks'), bEl = document.getElementById('h-bids');
+        if (aEl) aEl.innerHTML = [...asks].reverse().map(l => `<div class="ob-row"><div class="ob-bar" style="width:${(l.s / mA * 100).toFixed(0)}%;background:rgba(232,53,53,.1)"></div><span class="ob-px" style="color:#f6465d">${l.p.toFixed(2)}</span><span class="ob-sz">${l.s.toFixed(3)}</span></div>`).join('');
+        if (bEl) bEl.innerHTML = bids.map(l => `<div class="ob-row"><div class="ob-bar" style="width:${(l.s / mB * 100).toFixed(0)}%;background:rgba(24,201,106,.1)"></div><span class="ob-px" style="color:#0ecb81">${l.p.toFixed(2)}</span><span class="ob-sz">${l.s.toFixed(3)}</span></div>`).join('');
+        const sp = document.getElementById('h-spread'); if (sp) sp.textContent = 'Spread: ' + (asks[0].p - bids[0].p).toFixed(2);
+      }
+      renderOB();
+      setInterval(() => {
+        asks = asks.map(l => ({ p: Math.round((l.p + (Math.random() - .5) * .35) * 100) / 100, s: Math.max(.05, l.s + (Math.random() - .5) * .18) }));
+        bids = bids.map(l => ({ p: Math.round((l.p + (Math.random() - .5) * .35) * 100) / 100, s: Math.max(.05, l.s + (Math.random() - .5) * .18) }));
+        renderOB();
+      }, 700);
+
+      // ─── BOT FEEDS ───
+      function addBot(feedId, isMM) {
+        const feed = document.getElementById(feedId); if (!feed) return;
+        const buy = Math.random() > (isMM ? .5 : .4), price = (43218 + (Math.random() - .5) * 28).toFixed(2);
+        const qty = ((isMM ? .02 : .05) + Math.random() * .22).toFixed(3);
+        const now = new Date(), ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        const row = document.createElement('div'); row.className = 'trade-row';
+        row.innerHTML = `<span class="tside ${buy ? 'buy' : 'sell'}">${buy ? 'BUY' : 'SELL'}</span><span class="tpx">${price}</span><span class="tqty">${qty}</span><span class="ttime">${ts}</span>`;
+        feed.insertBefore(row, feed.firstChild); if (feed.children.length > 5) feed.removeChild(feed.lastChild);
+      }
+      function addHBot() {
+        const feed = document.getElementById('h-bots'); if (!feed) return;
+        const buy = Math.random() > .5, price = (43218 + (Math.random() - .5) * 18).toFixed(2);
+        const qty = (Math.random() * .28 + .04).toFixed(3), bot = ['MARKET MAKER', 'ALPHA'][Math.floor(Math.random() * 2)];
+        const d = document.createElement('div'); d.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:5px';
+        d.innerHTML = `<div style="width:5px;height:5px;border-radius:50%;background:${buy ? '#0ecb81' : 'var(--brand)'};animation:blink 1.3s infinite;flex-shrink:0"></div><span style="font-size:8px;color:var(--t3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bot}</span><span style="font-size:8px;color:${buy ? '#0ecb81' : '#f6465d'}">${buy ? 'BUY' : 'SELL'} ${qty}</span>`;
+        feed.insertBefore(d, feed.firstChild); if (feed.children.length > 4) feed.removeChild(feed.lastChild);
+      }
+      for (let i = 0; i < 5; i++) { addBot('mm-feed', true); addBot('alpha-feed', false); addHBot(); }
+      setInterval(() => addBot('mm-feed', true), 900);
+      setInterval(() => addBot('alpha-feed', false), 2200);
+      setInterval(addHBot, 1800);
+
+      // ─── DEPTH CANVAS (3D CANDLESTICK) ───
+      const depthCanvas = document.getElementById('depth-canvas');
+      if (depthCanvas && typeof THREE !== 'undefined') {
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x02050f);
+
+        const camera = new THREE.PerspectiveCamera(45, depthCanvas.clientWidth / depthCanvas.clientHeight, 0.1, 500);
+        camera.position.set(0, 30, 115);
+        camera.lookAt(0, 16, 0);
+
+        const renderer = new THREE.WebGLRenderer({ canvas: depthCanvas, antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        function resizeDepth() {
+          const w = depthCanvas.clientWidth;
+          const h = depthCanvas.clientHeight;
+          renderer.setSize(w, h);
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+        }
+
+        window.addEventListener('resize', resizeDepth, { passive: true });
+        resizeDepth();
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(20, 40, 20);
+        scene.add(ambientLight, dirLight);
+
+        const candleGroup = new THREE.Group();
+        candleGroup.scale.set(1.2, 1.15, 1.2);
+        scene.add(candleGroup);
+
+        let candlesData = [];
+        const barWidth = 1.8;
+
+        function generateCandles() {
+          const count = 48;
+          let base = 43218;
+          candlesData = [];
+          for (let i = 0; i < count; i++) {
+            const open = base;
+            const close = open + (Math.random() - 0.5) * 260;
+            const high = Math.max(open, close) + Math.random() * 35;
+            const low = Math.min(open, close) - Math.random() * 35;
+            candlesData.push({ open, close, high, low });
+            base = close;
+          }
+          if (candlesData.length) {
+            const minPrice = Math.min(...candlesData.map(c => c.low));
+            const maxPrice = Math.max(...candlesData.map(c => c.high));
+            const scaleY = 40 / (maxPrice - minPrice || 1);
+            candlesData = candlesData.map(c => ({ ...c, yOpen: (c.open - minPrice) * scaleY, yClose: (c.close - minPrice) * scaleY, yHigh: (c.high - minPrice) * scaleY, yLow: (c.low - minPrice) * scaleY }));
+          }
+        }
+
+        function drawDepthCandles3D() {
+          candleGroup.clear();
+          generateCandles();
+          candleGroup.position.set(0, -6, 0);
+
+          const candleSpacing = 1.5;
+          const xOffset = -(candlesData.length * candleSpacing) / 2;
+
+          candlesData.forEach((candle, idx) => {
+            const x = xOffset + idx * candleSpacing;
+            const isBull = candle.close >= candle.open;
+            const color = isBull ? 0x18c96a : 0xe83535;
+
+            const bodyHeight = Math.abs(candle.yClose - candle.yOpen) + 0.5;
+            const bodyY = Math.min(candle.yOpen, candle.yClose) + bodyHeight / 2;
+
+            const bodyGeo = new THREE.BoxGeometry(barWidth, bodyHeight, 1.2);
+            const bodyMat = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.92 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.set(x, bodyY, 0);
+            candleGroup.add(body);
+
+            const wickGeo = new THREE.BoxGeometry(0.3, candle.yHigh - candle.yLow, 0.3);
+            const wickMat = new THREE.MeshStandardMaterial({ color, opacity: 0.8, transparent: true });
+            const wick = new THREE.Mesh(wickGeo, wickMat);
+            wick.position.set(x, (candle.yHigh + candle.yLow) / 2, 0);
+            candleGroup.add(wick);
+          });
+
+          const midEl = document.getElementById('depth-mid');
+          if (midEl) {
+            const midVal = ((candlesData[0].open + candlesData[candlesData.length - 1].close) / 2).toFixed(2);
+            midEl.textContent = 'Mid: ' + midVal;
+          }
+        }
+
+        let targetRotation = 0;
+        depthCanvas.addEventListener('mousemove', e => {
+          targetRotation = ((e.offsetX / depthCanvas.clientWidth) - 0.5) * Math.PI * 0.3;
+        });
+
+        function renderLoop() {
+          requestAnimationFrame(renderLoop);
+          candleGroup.rotation.y += (targetRotation - candleGroup.rotation.y) * 0.07;
+          renderer.render(scene, camera);
+        }
+
+        drawDepthCandles3D();
+        setInterval(drawDepthCandles3D, 1000);
+        renderLoop();
+      }
+
+      // ─── THREE.JS GLOBAL NETWORK SCENE ───
+      const bhSec = document.getElementById('p-blackhole');
+      const bhCanvas = document.getElementById('bh-canvas');
+      const bhContent = document.getElementById('bh-content');
+      if (bhSec && bhCanvas && typeof THREE !== 'undefined') {
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 5000);
+        const renderer = new THREE.WebGLRenderer({ canvas: bhCanvas, alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        const group = new THREE.Group(); scene.add(group);
+        // Core sphere
+        const coreG = new THREE.IcosahedronGeometry(1.5, 4);
+        const coreM = new THREE.MeshBasicMaterial({ color: 0x5AF2B5, wireframe: true, transparent: true, opacity: 0.15 });
+        group.add(new THREE.Mesh(coreG, coreM));
+        // Network lines
+        const lMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08 });
+        for (let i = 0; i < 100; i++) {
+          const geo = new THREE.BufferGeometry();
+          const end = new THREE.Vector3((Math.random() - .5) * 40, (Math.random() - .5) * 40, (Math.random() - .5) * 40).normalize().multiplyScalar(15 + Math.random() * 10);
+          geo.setFromPoints([new THREE.Vector3(0, 0, 0), end]);
+          group.add(new THREE.Line(geo, lMat));
+        }
+        // Candlestick disc
+        const discGroup = new THREE.Group(); group.add(discGroup);
+        const radius = 18;
+        for (let i = 0; i < 180; i++) {
+          const angle = (i / 180) * Math.PI * 2;
+          const h = 0.5 + Math.random() * 3.5, up = Math.random() > .5;
+          const geo = new THREE.BoxGeometry(0.12, h, 0.12);
+          const mat = new THREE.MeshBasicMaterial({ color: up ? 0x18c96a : 0xeb4034, transparent: true, opacity: 0.8 });
+          const m = new THREE.Mesh(geo, mat);
+          m.position.set(Math.cos(angle) * radius, up ? h / 2 : -h / 2, Math.sin(angle) * radius);
+          discGroup.add(m);
+        }
+        camera.position.set(0, 15, 55); camera.lookAt(0, 0, 0);
+        let mouseX = 0, mouseY = 0;
+        document.addEventListener('mousemove', e => { mouseX = (e.clientX - window.innerWidth / 2) * 0.0005; mouseY = (e.clientY - window.innerHeight / 2) * 0.0005; });
+        function animBH() {
+          requestAnimationFrame(animBH);
+          group.rotation.y += 0.0015; discGroup.rotation.y += 0.0008;
+          group.rotation.x += (mouseY - group.rotation.x) * 0.05;
+          group.rotation.y += (mouseX - group.rotation.y) * 0.05;
+          discGroup.children.forEach((c, idx) => { c.scale.y = 1 + Math.sin(performance.now() * 0.002 + idx) * 0.1; });
+          renderer.render(scene, camera);
+        }
+        animBH();
+        window.addEventListener('resize', () => {
+          camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        const handleBHScroll = () => {
+          const rect = bhSec.getBoundingClientRect(); const winH = window.innerHeight;
+          if (rect.top < winH && rect.bottom > 0) {
+            const p = Math.max(0, Math.min(1, (winH - rect.top) / (bhSec.offsetHeight + winH)));
+            camera.position.z = 55 - p * 35; camera.lookAt(0, 0, 0);
+            if (bhContent) { const co = Math.max(0, Math.min(1, (p - .15) * 5)) * Math.max(0, Math.min(1, (.85 - p) * 6)); bhContent.style.opacity = String(co); bhContent.style.transform = `translateY(${(0.5 - p) * 100}px)`; }
+          }
+        };
+        if (window.lenis) window.lenis.on('scroll', handleBHScroll);
+        else document.getElementById('scroll-container').addEventListener('scroll', handleBHScroll, { passive: true });
+      }
+
+      // ─── CINEMATIC REVEAL ───
+      const appView = document.getElementById('app-view');
+      if (appView) appView.classList.add('cinematic-reveal');
+      document.querySelectorAll('.panel-content').forEach(el => {
+        el.style.opacity = '1'; el.style.transform = 'translateY(0) scale(1)'; el.style.filter = 'blur(0)';
+      });
+
+    }); // end DOMContentLoaded
+  </script>
+
+  <!-- Motion for scroll animations (module script, runs after main) -->
+  <script type="module">
+    import { animate, inView, stagger } from "https://cdn.jsdelivr.net/npm/motion@11.11.13/+esm";
+    const springCfg = { easing: [0.16, 1, 0.3, 1], duration: 0.85 };
+    function animSec(sId, hSel, cSel, cAnim) {
+      if (!document.querySelector(sId)) return;
+      inView(sId, () => {
+        if (hSel && document.querySelector(sId + ' ' + hSel)) animate(sId + ' ' + hSel, { opacity: [0, 1], y: [40, 0] }, { ...springCfg, duration: 0.9 });
+        if (cSel && document.querySelector(sId + ' ' + cSel)) animate(sId + ' ' + cSel, cAnim || { opacity: [0, 1], scale: [0.93, 1], y: [60, 0] }, { ...springCfg, delay: stagger(0.12, { startDelay: 0.25 }) });
+      }, { amount: 0.25 });
+    }
+    animSec('#p-features', '.features-header', '.facc', { opacity: [0, 1], x: [120, 0] });
+    animSec('#p-bots', '.fmt-hide', '.bot-card');
+    animSec('#p-depth', '.fmt-hide', '.depth-wrap');
+    animSec('#p-orders', '.op-reveal', '.op-card');
+    animSec('#p-cta', '.cta-inner', null);
+  </script>
+
+
+
+<script>
+  (function() {
+    try {
+      const authRaw = localStorage.getItem('synthetic-bull/auth');
+      let isLoggedIn = false;
+      if (authRaw) {
+        const auth = JSON.parse(authRaw);
+        if (auth.token && auth.username) {
+          isLoggedIn = true;
+        }
+      }
+
+      // If logged in, change text of Sign Up buttons to "Go to Terminal" and hide Login buttons
+      if (isLoggedIn) {
+        document.querySelectorAll('.btn-signup .btn-text').forEach(el => {
+          el.textContent = 'Go to Terminal';
+        });
+        document.querySelectorAll('.btn-login').forEach(el => {
+          el.style.display = 'none';
+        });
+      }
+
+      // SIGN UP buttons navigate to terminal with signup mode
+      document.querySelectorAll('.btn-signup').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          // If already logged in the text says "Go to Terminal" — just go to terminal
+          const btnText = btn.querySelector('.btn-text');
+          if (btnText && btnText.textContent.trim() === 'Go to Terminal') {
+            window.location.href = '/terminal';
+          } else {
+            window.location.href = '/terminal?signup=true';
+          }
+        });
+      });
+      // LOGIN buttons navigate to terminal (login modal shown by default)
+      document.querySelectorAll('.btn-login, .bh-cta').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = '/terminal';
+        });
+      });
+
+      // Remove buttons that just redirect to # and are unnecessary.
+      document.querySelectorAll('a[href="#"]').forEach(a => {
+        if (!a.id.startsWith('nav-') && !a.hasAttribute('data-panel')) {
+           // Ignored generic
+        }
+      });
+
+      // Hide duplicate or unnecessary buttons
+      document.querySelectorAll('.hbtn.out:not(.btn-login), .hbtn.sec').forEach(btn => btn.remove());
+
+    } catch(e) {}
+  })();
+</script>
+
+
+</body>
+
+</html>
