@@ -19,7 +19,8 @@ CREATE TABLE portfolios (
     symbol   VARCHAR(20) NOT NULL,
     quantity DECIMAL(18,6) NOT NULL DEFAULT 0,
     avg_cost DECIMAL(18,6) NOT NULL DEFAULT 0,
-    UNIQUE (user_id, symbol)
+    UNIQUE (user_id, symbol),
+    CONSTRAINT no_excess_short CHECK (quantity >= -5)
 );
 
 -- ─── Orders ───────────────────────────────────────────────────────────────────

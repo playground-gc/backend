@@ -46,7 +46,7 @@ async def get_me(
 
     # Load portfolio positions
     port_rows = await db.fetch(
-        "SELECT symbol, quantity, avg_cost FROM portfolios WHERE user_id = $1 AND quantity > 0",
+        "SELECT symbol, quantity, avg_cost FROM portfolios WHERE user_id = $1 AND quantity != 0",
         user_id,
     )
 
@@ -77,7 +77,7 @@ async def get_me(
             "current_price":  current_price,
             "market_value":   round(market_value, 2),
             "unrealized_pnl": round(unrealized_pnl, 2),
-            "pnl_pct":        round((unrealized_pnl / (avg_cost * qty) * 100), 2)
+            "pnl_pct":        round((unrealized_pnl / abs(avg_cost * qty) * 100), 2)
                               if avg_cost and qty else 0.0,
         })
 

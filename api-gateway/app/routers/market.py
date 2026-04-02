@@ -79,7 +79,7 @@ async def get_portfolio(
 ):
     user_id = current_user["user_id"]
     rows = await db.fetch(
-        "SELECT symbol, quantity, avg_cost FROM portfolios WHERE user_id=$1 AND quantity > 0",
+        "SELECT symbol, quantity, avg_cost FROM portfolios WHERE user_id=$1 AND quantity != 0",
         user_id,
     )
 
