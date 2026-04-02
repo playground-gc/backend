@@ -66,7 +66,7 @@ function TradingTerminal() {
       <div className="center-stack">
         <div
           className="panel"
-          style={{ flex: "1 1 500px", minHeight: "400px" }}
+          style={{ flex: "1 1 0", minHeight: "300px", overflow: "hidden" }}
         >
           <ChartGrid
             mainSymbol={activeSymbol}

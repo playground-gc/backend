@@ -46,7 +46,7 @@ export default function ChartGrid({ mainSymbol, comparisonSymbols }) {
 
         if (layout === '2x1') {
             return (
-                <div style={styles.flexRow}>
+                <div style={{ ...styles.fill, display: 'flex', flexDirection: 'row', gap: '2px' }}>
                     <div style={styles.flexItem}>
                         <TradingChart key={`2x1-a-${mainSymbol}`} symbol={mainSymbol} />
                     </div>
@@ -59,7 +59,7 @@ export default function ChartGrid({ mainSymbol, comparisonSymbols }) {
 
         if (layout === '1x2') {
             return (
-                <div style={styles.flexCol}>
+                <div style={{ ...styles.fill, display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     <div style={styles.flexItem}>
                         <TradingChart key={`1x2-a-${mainSymbol}`} symbol={mainSymbol} />
                     </div>
@@ -72,12 +72,12 @@ export default function ChartGrid({ mainSymbol, comparisonSymbols }) {
 
         if (layout === '2x2') {
             return (
-                <div style={styles.flexCol}>
-                    <div style={styles.flexRow}>
+                <div style={{ ...styles.fill, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ ...styles.flexItem, display: 'flex', flexDirection: 'row', gap: '2px' }}>
                         <div style={styles.flexItem}><TradingChart key="2x2-a" symbol={mainSymbol} /></div>
                         <div style={styles.flexItem}><TradingChart key="2x2-b" symbol={subSymbols[0]} /></div>
                     </div>
-                    <div style={styles.flexRow}>
+                    <div style={{ ...styles.flexItem, display: 'flex', flexDirection: 'row', gap: '2px' }}>
                         <div style={styles.flexItem}><TradingChart key="2x2-c" symbol={subSymbols[1]} /></div>
                         <div style={styles.flexItem}><TradingChart key="2x2-d" symbol={subSymbols[2]} /></div>
                     </div>
@@ -138,7 +138,7 @@ export default function ChartGrid({ mainSymbol, comparisonSymbols }) {
                 </div>
             </div>
 
-            <div style={{ flex: 1, overflow: 'hidden', backgroundColor: 'transparent' }}>
+            <div style={{ flex: 1, overflow: 'hidden', backgroundColor: 'transparent', minHeight: 0, position: 'relative' }}>
                 {renderCharts()}
             </div>
         </div>
@@ -180,27 +180,17 @@ const styles = {
         width: '100%',
         height: '100%'
     },
-    flexRow: {
-        display: 'flex',
-        flexDirection: 'row',
+    fill: {
         width: '100%',
         height: '100%',
-        gap: '2px',
-        backgroundColor: 'rgba(255, 255, 255, 0.05)'
-    },
-    flexCol: {
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100%',
-        height: '100%',
-        gap: '2px',
-        backgroundColor: 'rgba(255, 255, 255, 0.05)'
+        overflow: 'hidden',
     },
     flexItem: {
         flex: 1,
         minWidth: 0,
         minHeight: 0,
-        backgroundColor: 'transparent'
+        overflow: 'hidden',
+        backgroundColor: 'transparent',
     },
     dropdownToggle: {
         display: 'flex',
