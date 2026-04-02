@@ -212,9 +212,10 @@ async def market_maker_symbol(
             place_ask = agent.q > -settings.SHORT_MAX
 
             # ── 4. Cancel previous quotes (fill detection) ───────────────────
-            # A 404 on DELETE means the order was already matched (filled), not
-            # just pending.  We use this to update q in real-time instead of
-            # waiting for the 5-second portfolio sync.
+            # A 409 on DELETE means the order is already in a terminal state.
+            # If the detail says "filled", the order was matched before we
+            # cancelled it — update q in real-time instead of waiting for the
+            # 5-second portfolio sync.
             prev_bid_id = agent.active_bid_id
             prev_ask_id = agent.active_ask_id
             agent.active_bid_id = ""
@@ -238,17 +239,26 @@ async def market_maker_symbol(
                 for side, r in zip(cancel_sides, results):
                     if isinstance(r, Exception):
                         log.debug("[%s] Cancel %s error: %s", symbol, side, r)
-                    elif r.status_code == 404:
-                        # Order was filled before we could cancel it.
-                        if side == "bid":
-                            agent.q += 1
-                            log.debug("[%s] Bid fill detected, q=%d", symbol, agent.q)
-                        else:
-                            agent.q -= 1
-                            log.debug("[%s] Ask fill detected, q=%d", symbol, agent.q)
-                        # Re-evaluate ask guard after fill detection so we don't
-                        # place a sell that would breach SHORT_MAX this same tick.
-                        place_ask = agent.q > -settings.SHORT_MAX
+                    elif r.status_code == 409:
+                        # 409 means order is already in a terminal state.
+                        # "Order already filled" means it was matched before we
+                        # could cancel it — update inventory accordingly.
+                        # "Order already cancelled/failed" should not happen here
+                        # (we own these IDs and cancel each only once).
+                        try:
+                            detail = r.json().get("detail", "").lower()
+                        except Exception:
+                            detail = ""
+                        if "filled" in detail:
+                            if side == "bid":
+                                agent.q += 1
+                                log.debug("[%s] Bid fill detected (409), q=%d", symbol, agent.q)
+                            else:
+                                agent.q -= 1
+                                log.debug("[%s] Ask fill detected (409), q=%d", symbol, agent.q)
+                            # Re-evaluate guards after fill detection.
+                            place_bid = agent.q < settings.Q_MAX
+                            place_ask = agent.q > -settings.SHORT_MAX
 
             # ── 5. Place new bid and ask ─────────────────────────────────────
             if place_bid:

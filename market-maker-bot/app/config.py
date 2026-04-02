@@ -19,7 +19,11 @@ class Settings(BaseSettings):
 
     # k       — order-arrival intensity decay rate per unit of spread.
     #           Higher k → fills concentrate near tight quotes.
-    K: float = 1.5
+    #           Must be calibrated to the market's effective half-spread.
+    #           With the synthetic generator's effective spread of ~1 cent,
+    #           k ≈ 1/delta_target → k=200 gives delta_fixed ≈ $0.005 per side,
+    #           placing quotes inside the generator's ±$0.01 range.
+    K: float = 200.0
 
     # T_TICKS — rolling strategy horizon in ticks.
     #           The bot resets the horizon every T_TICKS ticks so inventory
