@@ -51,30 +51,143 @@ async def place_order(
     user_id = current_user["user_id"]
     order_id = str(uuid.uuid4())
 
+    if body.side.value == "buy":
+        # Soft balance check — prevents unfunded orders from reaching the matching
+        # engine and causing fill_processor to roll back settled trades.
+        # Market orders have no known price so the check is skipped for them;
+        # the fill_processor balance check is the backstop in that case.
+        order_price = body.price if body.price is not None else body.limit_price
+        if order_price is not None:
+            user_balance = await db.fetchval(
+                "SELECT balance FROM users WHERE id = $1", user_id
+            )
+            if float(user_balance or 0) < order_price * body.quantity:
+                raise HTTPException(status_code=400, detail="Insufficient balance for this order")
+
     if body.side.value == "sell":
-        # Check short selling limit
-        row = await db.fetchrow(
-            "SELECT quantity FROM portfolios WHERE user_id = $1 AND symbol = $2",
-            user_id,
-            body.symbol,
-        )
-        current_qty = float(row["quantity"]) if row else 0.0
+        # ── Sell orders: validate + insert atomically to prevent overselling ──
+        # FOR UPDATE locks the portfolio row so concurrent sell validations
+        # are serialized; the DB CHECK constraint is a hard backstop.
+        async with db.transaction():
+            row = await db.fetchrow(
+                "SELECT quantity FROM portfolios WHERE user_id = $1 AND symbol = $2 FOR UPDATE",
+                user_id,
+                body.symbol,
+            )
+            current_qty = float(row["quantity"]) if row else 0.0
 
-        # Calculate active sell orders quantity
-        active_sells = float(await db.fetchval(
-            "SELECT COALESCE(SUM(quantity - filled_qty), 0) FROM orders "
-            "WHERE user_id = $1 AND symbol = $2 AND side = 'sell' AND status IN ('open', 'partial', 'pending_trigger')",
-            user_id,
-            body.symbol,
-        ))
+            active_sells = float(await db.fetchval(
+                "SELECT COALESCE(SUM(quantity - filled_qty), 0) FROM orders "
+                "WHERE user_id = $1 AND symbol = $2 AND side = 'sell' AND status IN ('open', 'partial', 'pending_trigger')",
+                user_id,
+                body.symbol,
+            ))
 
-        if current_qty - active_sells - body.quantity < -settings.MAX_SHORT_INVENTORY:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Short selling limit exceeded. Max allowed short position is {settings.MAX_SHORT_INVENTORY}.",
+            if current_qty - active_sells - body.quantity < -settings.MAX_SHORT_INVENTORY:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Short selling limit exceeded. Max allowed short position is {settings.MAX_SHORT_INVENTORY}.",
+                )
+
+            if body.order_type.value in _STOP_TYPES:
+                expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+                try:
+                    await db.execute(
+                        """
+                        INSERT INTO orders
+                            (id, user_id, symbol, order_type, side, stop_price, limit_price,
+                             quantity, status, expires_at)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_trigger',$9)
+                        """,
+                        order_id,
+                        user_id,
+                        body.symbol,
+                        body.order_type.value,
+                        body.side.value,
+                        body.stop_price,
+                        body.limit_price,
+                        body.quantity,
+                        expires_at,
+                    )
+                except Exception as e:
+                    log.error("DB insert failed for stop order: %s", e)
+                    raise HTTPException(status_code=500, detail="Failed to save stop order")
+            else:
+                try:
+                    await db.execute(
+                        """
+                        INSERT INTO orders (id, user_id, symbol, order_type, side, price, quantity, status)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, 'open')
+                        """,
+                        order_id,
+                        user_id,
+                        body.symbol,
+                        body.order_type.value,
+                        body.side.value,
+                        body.price,
+                        body.quantity,
+                    )
+                except Exception as e:
+                    log.error("DB insert failed: %s", e)
+                    raise HTTPException(status_code=500, detail="Failed to save order")
+
+        # Transaction committed — now handle external comms
+        if body.order_type.value in _STOP_TYPES:
+            try:
+                redis = await get_redis()
+                payload = json.dumps(
+                    {
+                        "order_id": order_id,
+                        "user_id": user_id,
+                        "symbol": body.symbol,
+                        "side": body.side.value,
+                        "type": body.order_type.value,
+                        "stop_price": body.stop_price,
+                        "limit_price": body.limit_price or 0.0,
+                        "quantity": body.quantity,
+                        "expires_at": expires_at.isoformat(),
+                    }
+                )
+                await redis.publish("stop_orders:new", payload)
+            except Exception as e:
+                log.warning("Redis publish for stop order failed: %s", e)
+
+            return StopOrderResponse(
+                order_id=order_id,
+                status="pending_trigger",
+                stop_price=body.stop_price,
+                expires_at=expires_at.isoformat(),
             )
 
-    # ── Stop orders ────────────────────────────────────────────────────────────
+        engine_msg = {
+            "action": "place",
+            "order_id": order_id,
+            "user_id": user_id,
+            "symbol": body.symbol,
+            "type": body.order_type.value,
+            "side": body.side.value,
+            "price": body.price,
+            "quantity": body.quantity,
+            "timestamp": int(time.time() * 1000),
+        }
+        try:
+            await engine.send_order(engine_msg)
+        except Exception as e:
+            await db.execute("UPDATE orders SET status='failed' WHERE id=$1", order_id)
+            log.error("Engine send failed: %s", e)
+            raise HTTPException(status_code=503, detail="Matching engine unavailable")
+
+        return OrderResponse(
+            order_id=order_id,
+            status="submitted",
+            symbol=body.symbol,
+            order_type=body.order_type.value,
+            side=body.side.value,
+            price=body.price,
+            quantity=body.quantity,
+        )
+
+    # ── Buy stop orders ────────────────────────────────────────────────────────
     if body.order_type.value in _STOP_TYPES:
         expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
@@ -128,10 +241,7 @@ async def place_order(
             expires_at=expires_at.isoformat(),
         )
 
-    # ── Limit / Market orders (existing behaviour) ─────────────────────────────
-    # Persist order immediately so the client has a reference ID.
-    # Status starts as 'open'; the matching engine updates it asynchronously
-    # via trade events published to Redis.
+    # ── Buy limit / market orders ──────────────────────────────────────────────
     try:
         await db.execute(
             """

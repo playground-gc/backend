@@ -50,8 +50,10 @@ async def process_trade(pool: asyncpg.Pool, trade: dict) -> None:
 
     cost = price * quantity
 
-    # ── Critical path: trade insert + order status updates ─────────────────
-    # These must NOT be rolled back by portfolio/balance failures.
+    # ── Single atomic transaction: all-or-nothing ──────────────────────────
+    # Trade insert, order status updates, and portfolio/balance changes must
+    # all commit together. Any failure rolls back everything so the order
+    # stays "open" and no money/shares change hands.
     async with pool.acquire() as conn:
         async with conn.transaction():
             # 1. Insert into trades table
@@ -100,86 +102,84 @@ async def process_trade(pool: asyncpg.Pool, trade: dict) -> None:
                     uuid.UUID(sell_order_id), quantity,
                 )
 
-    # ── Secondary path: portfolio + balance updates ────────────────────────
-    # Failures here must NOT affect order status updates above.
+            # 4. Update buyer portfolio and balance
+            if buyer_id:
+                # Pre-check balance before touching any portfolio rows so that a
+                # funding failure rolls back cleanly without partial writes.
+                buyer_balance = await conn.fetchval(
+                    "SELECT balance FROM users WHERE id = $1 FOR UPDATE",
+                    uuid.UUID(buyer_id),
+                )
+                if buyer_balance is None or float(buyer_balance) < cost:
+                    raise RuntimeError(
+                        f"Insufficient balance for buyer {buyer_id}: "
+                        f"has {buyer_balance}, required {cost}"
+                    )
 
-    # 4. Update buyer portfolio and balance
-    if buyer_id:
-        try:
-            async with pool.acquire() as conn:
-                async with conn.transaction():
+                await conn.execute(
+                    """
+                    INSERT INTO portfolios (user_id, symbol, quantity, avg_cost)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (user_id, symbol) DO UPDATE
+                    SET avg_cost = CASE
+                                      WHEN portfolios.quantity + $3 > 0
+                                      THEN (portfolios.avg_cost * portfolios.quantity + $4 * $3)
+                                           / (portfolios.quantity + $3)
+                                      ELSE $4
+                                   END,
+                        quantity = portfolios.quantity + $3
+                    """,
+                    uuid.UUID(buyer_id), symbol, quantity, price,
+                )
+                row = await conn.fetchrow(
+                    """
+                    UPDATE users SET balance = balance - $2
+                    WHERE id = $1
+                    RETURNING balance
+                    """,
+                    uuid.UUID(buyer_id), cost,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO balance_history
+                        (user_id, delta, balance, reason, symbol, quantity, price, trade_id)
+                    VALUES ($1, $2, $3, 'trade_buy', $4, $5, $6, $7)
+                    """,
+                    uuid.UUID(buyer_id), -cost, float(row["balance"]),
+                    symbol, quantity, price,
+                    uuid.UUID(tid) if (tid := _try_uuid(trade.get("trade_id"))) else None,
+                )
+
+            # 5. Update seller portfolio and balance
+            if seller_id:
+                await conn.execute(
+                    """
+                    INSERT INTO portfolios (user_id, symbol, quantity, avg_cost)
+                    VALUES ($1, $2, $3, 0)
+                    ON CONFLICT (user_id, symbol) DO UPDATE
+                    SET quantity = portfolios.quantity + $3
+                    """,
+                    uuid.UUID(seller_id), symbol, -quantity,
+                )
+                row = await conn.fetchrow(
+                    """
+                    UPDATE users SET balance = balance + $2
+                    WHERE id = $1
+                    RETURNING balance
+                    """,
+                    uuid.UUID(seller_id), cost,
+                )
+                if row:
                     await conn.execute(
                         """
-                        INSERT INTO portfolios (user_id, symbol, quantity, avg_cost)
-                        VALUES ($1, $2, $3, $4)
-                        ON CONFLICT (user_id, symbol) DO UPDATE
-                        SET avg_cost = CASE
-                                          WHEN portfolios.quantity + $3 > 0
-                                          THEN (portfolios.avg_cost * portfolios.quantity + $4 * $3)
-                                               / (portfolios.quantity + $3)
-                                          ELSE $4
-                                       END,
-                            quantity = portfolios.quantity + $3
+                        INSERT INTO balance_history
+                            (user_id, delta, balance, reason, symbol, quantity, price, trade_id)
+                        VALUES ($1, $2, $3, 'trade_sell', $4, $5, $6, $7)
                         """,
-                        uuid.UUID(buyer_id), symbol, quantity, price,
+                        uuid.UUID(seller_id), cost, float(row["balance"]),
+                        symbol, quantity, price,
+                        uuid.UUID(tid) if (tid := _try_uuid(trade.get("trade_id"))) else None,
                     )
-                    row = await conn.fetchrow(
-                        """
-                        UPDATE users SET balance = balance - $2
-                        WHERE id = $1 AND balance >= $2
-                        RETURNING balance
-                        """,
-                        uuid.UUID(buyer_id), cost,
-                    )
-                    if row:
-                        await conn.execute(
-                            """
-                            INSERT INTO balance_history
-                                (user_id, delta, balance, reason, symbol, quantity, price, trade_id)
-                            VALUES ($1, $2, $3, 'trade_buy', $4, $5, $6, $7)
-                            """,
-                            uuid.UUID(buyer_id), -cost, float(row["balance"]),
-                            symbol, quantity, price,
-                            uuid.UUID(tid) if (tid := _try_uuid(trade.get("trade_id"))) else None,
-                        )
-        except Exception as e:
-            log.warning("Buyer portfolio/balance update failed for %s: %s", buyer_id, e)
-
-    # 5. Update seller portfolio and balance
-    if seller_id:
-        try:
-            async with pool.acquire() as conn:
-                async with conn.transaction():
-                    await conn.execute(
-                        """
-                        INSERT INTO portfolios (user_id, symbol, quantity, avg_cost)
-                        VALUES ($1, $2, -$3, 0)
-                        ON CONFLICT (user_id, symbol) DO UPDATE
-                        SET quantity = portfolios.quantity - $3
-                        """,
-                        uuid.UUID(seller_id), symbol, quantity,
-                    )
-                    row = await conn.fetchrow(
-                        """
-                        UPDATE users SET balance = balance + $2
-                        WHERE id = $1
-                        RETURNING balance
-                        """,
-                        uuid.UUID(seller_id), cost,
-                    )
-                    if row:
-                        await conn.execute(
-                            """
-                            INSERT INTO balance_history
-                                (user_id, delta, balance, reason, symbol, quantity, price, trade_id)
-                            VALUES ($1, $2, $3, 'trade_sell', $4, $5, $6, $7)
-                            """,
-                            uuid.UUID(seller_id), cost, float(row["balance"]),
-                            symbol, quantity, price,
-                            uuid.UUID(tid) if (tid := _try_uuid(trade.get("trade_id"))) else None,
-                        )
-        except Exception as e:
-            log.warning("Seller portfolio/balance update failed for %s: %s", seller_id, e)
 
 
 async def run_fill_processor() -> None:
